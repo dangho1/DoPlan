@@ -58,8 +58,14 @@ export default function HomeScreen() {
           setNewChildBirthdate("");
           setModalVisible(false);
         },
-        onError: () => {
-          showAlert({ message: "Failed to add child.", type: "error" });
+        onError: (error) => {
+          showAlert({
+            message:
+              error instanceof Error && error.message === "duplicate-child-name"
+                ? "A child with this name already exists."
+                : "Failed to add child.",
+            type: "error",
+          });
         },
       },
     );

@@ -1,5 +1,7 @@
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useDeleteChild } from "@/hooks/queries/useChildren";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -51,6 +53,8 @@ export default function ChildSettings({
     childId ?? (typeof params.childId === "string" ? params.childId : "");
   const handleBack = onBack ?? (() => router.back());
   const colorScheme = useColorScheme();
+  const { data: currentUser } = useCurrentUser();
+  const deleteChild = useDeleteChild(currentUser?.id);
   const scrollViewRef = useRef<ScrollView | null>(null);
   const refNameInput = useRef<TextInput | null>(null);
   const refBirthDateInput = useRef<TextInput | null>(null);
@@ -491,6 +495,32 @@ export default function ChildSettings({
     );
   };
 
+  const handleDeleteChild = () => {
+    Alert.alert(
+      "Delete Child",
+      `Delete ${resolvedChildName} and all related calendar, activity, and expense data? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            deleteChild.mutate(resolvedChildId, {
+              onSuccess: () => {
+                Alert.alert("Deleted", `${resolvedChildName} has been deleted.`);
+                router.replace("/(tabs)");
+              },
+              onError: (error) => {
+                console.error("Error deleting child:", error);
+                Alert.alert("Error", "Failed to delete child.");
+              },
+            });
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View
       style={[
@@ -551,7 +581,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            Update {resolvedChildName}'s basic information
+            Update {resolvedChildName}&apos;s basic information
           </Text>
 
           <View
@@ -785,7 +815,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            Manage which parents have access to {resolvedChildName}'s information
+            Manage which parents have access to {resolvedChildName}&apos;s information
           </Text>
 
           {/* Add Parent */}
@@ -927,6 +957,42 @@ export default function ChildSettings({
           )}
         </View>
 
+        <View style={styles.section}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: Colors[colorScheme ?? "light"].accent },
+            ]}
+          >
+            Delete Child
+          </Text>
+          <Text
+            style={[
+              styles.sectionDescription,
+              { color: Colors[colorScheme ?? "light"].textSecondary },
+            ]}
+          >
+            Permanently remove {resolvedChildName} and all related data from the app.
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.deleteChildButton,
+              deleteChild.isPending && styles.deleteChildButtonDisabled,
+            ]}
+            onPress={handleDeleteChild}
+            disabled={deleteChild.isPending}
+          >
+            {deleteChild.isPending ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="trash-outline" size={20} color="#fff" />
+                <Text style={styles.deleteChildButtonText}>Delete Child</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
         {/* Info Section */}
         <View
           style={[
@@ -948,7 +1014,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            All parents with access can view and manage {resolvedChildName}'s calendar,
+            All parents with access can view and manage {resolvedChildName}&apos;s calendar,
             expenses, and other information.
           </Text>
         </View>
@@ -1163,6 +1229,24 @@ const styles = StyleSheet.create({
   },
   removeButtonDisabled: {
     opacity: 0.3,
+  },
+  deleteChildButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    gap: 8,
+    backgroundColor: "#ff4444",
+  },
+  deleteChildButtonDisabled: {
+    opacity: 0.6,
+  },
+  deleteChildButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
   infoBox: {
     flexDirection: "row",
