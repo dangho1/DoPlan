@@ -3,11 +3,13 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAddChild, useChildren } from "@/hooks/queries/useChildren";
 import type { Child } from "@/lib/types";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
     Image,
     Modal,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -21,6 +23,7 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const { showAlert, alertProps } = useIOSAlert();
   const router = useRouter();
+  const tabBarHeight = useBottomTabBarHeight();
 
   const { data: currentUser } = useCurrentUser();
   const userId = currentUser?.id;
@@ -81,59 +84,69 @@ export default function HomeScreen() {
         { backgroundColor: Colors[colorScheme ?? "light"].background },
       ]}
     >
-      <Image
-        source={require("../../assets/images/logo.png")}
-        style={styles.logo}
-        resizeMode="contain"
-      />
-      <View style={styles.buttonContainer}>
-        {items.length > 0 ? (
-          items.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                styles.button,
-                { backgroundColor: Colors[colorScheme ?? "light"].primary },
-              ]}
-              onPress={() => handleChildPress(item)}
-            >
-              <Text
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarHeight + 20 },
+        ]}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+      >
+        <Image
+          source={require("../../assets/images/logo.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <View style={styles.buttonContainer}>
+          {items.length > 0 ? (
+            items.map((item) => (
+              <TouchableOpacity
+                key={item.id}
                 style={[
-                  styles.buttonText,
-                  { color: Colors[colorScheme ?? "light"].buttonText },
+                  styles.button,
+                  { backgroundColor: Colors[colorScheme ?? "light"].primary },
                 ]}
+                onPress={() => handleChildPress(item)}
               >
-                {item.name || "Unknown Item"}
-              </Text>
-            </TouchableOpacity>
-          ))
-        ) : (
-          <Text
+                <Text
+                  style={[
+                    styles.buttonText,
+                    { color: Colors[colorScheme ?? "light"].buttonText },
+                  ]}
+                >
+                  {item.name || "Unknown Item"}
+                </Text>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <Text
+              style={[
+                styles.noItemsText,
+                { color: Colors[colorScheme ?? "light"].textSecondary },
+              ]}
+            >
+              No items found in database
+            </Text>
+          )}
+          <TouchableOpacity
             style={[
-              styles.noItemsText,
-              { color: Colors[colorScheme ?? "light"].textSecondary },
+              styles.addButton,
+              { borderColor: Colors[colorScheme ?? "light"].primary },
             ]}
+            onPress={() => setModalVisible(true)}
           >
-            No items found in database
-          </Text>
-        )}
-        <TouchableOpacity
-          style={[
-            styles.addButton,
-            { borderColor: Colors[colorScheme ?? "light"].primary },
-          ]}
-          onPress={() => setModalVisible(true)}
-        >
-          <Text
-            style={[
-              styles.addButtonText,
-              { color: Colors[colorScheme ?? "light"].primary },
-            ]}
-          >
-            Add Child
-          </Text>
-        </TouchableOpacity>
-      </View>
+            <Text
+              style={[
+                styles.addButtonText,
+                { color: Colors[colorScheme ?? "light"].primary },
+              ]}
+            >
+              Add Child
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
       <Modal
         animationType="slide"
         transparent={true}
@@ -234,6 +247,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     alignItems: "center",
     padding: 20,
     paddingTop: 60,
