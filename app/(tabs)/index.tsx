@@ -1,7 +1,11 @@
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import React, { useEffect, useState } from "react";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useAddChild, useChildren } from "@/hooks/queries/useChildren";
+import type { Child } from "@/lib/types";
+import React, { useState } from "react";
 import {
+    Alert,
     Image,
     Modal,
     StyleSheet,
@@ -10,21 +14,14 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import ChildMenu from "../../components/ChildMenu";
 import IOSAlert from "../../components/IOSAlert";
 import { useIOSAlert } from "../../hooks/useIOSAlert";
-import { supabase } from "../../lib/supabase";
 import Activities from "../child/activities";
 import Calendar from "../child/calendar";
 import ChildSettings from "../child/child-settings";
 import Economics from "../child/economics";
-
-interface Child {
-  id: string;
-  name: string;
-  date_of_birth: string;
-  avatar_url?: string | null;
-}
 
 type CurrentView =
   | "home"
@@ -37,180 +34,62 @@ type CurrentView =
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const { showAlert, alertProps } = useIOSAlert();
-  const [items, setItems] = useState<Child[]>([]);
+  const queryClient = useQueryClient();
+
+  const { data: currentUser } = useCurrentUser();
+  const userId = currentUser?.id;
+
+  const { data: items = [] } = useChildren(userId);
+  const addChild = useAddChild(userId);
+
   const [modalVisible, setModalVisible] = useState(false);
   const [newChildName, setNewChildName] = useState("");
   const [newChildBirthdate, setNewChildBirthdate] = useState("");
   const [currentView, setCurrentView] = useState<CurrentView>("home");
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
 
-  useEffect(() => {
-    async function fetchItems() {
-      try {
-        // First get the current user
-        const { data: userData, error: userError } =
-          await supabase.auth.getUser();
-        if (userError) {
-          console.error("Error fetching user:", userError);
-          return;
-        }
-
-        if (!userData?.user?.id) {
-          console.log("No user is currently logged in.");
-          return;
-        }
-
-        const userId = userData.user.id;
-
-        // Fetch children that belong to the current user through the user_children junction table
-        const { data, error } = await supabase
-          .from("user_children")
-          .select(
-            `
-            child_id,
-            children (
-              id,
-              name,
-              date_of_birth,
-              avatar_url
-            )
-          `,
-          )
-          .eq("user_id", userId);
-
-        if (error) {
-          console.error("Error fetching items:", error);
-        } else {
-          // Extract the children data from the joined result
-          const childrenData =
-            data
-              ?.map((item) => item.children)
-              .filter((child) => child !== null)
-              .flat() || [];
-          setItems(childrenData);
-        }
-      } catch (error) {
-        console.error("Error fetching items:", error);
-      }
-    }
-    fetchItems();
-  }, []);
-
   const handleAddNewChild = async () => {
-    if (newChildName) {
-      try {
-        const { data: userData, error: userError } =
-          await supabase.auth.getUser();
-        if (userError) {
-          console.error("Error fetching user:", userError);
-          showAlert({
-            message: "Failed to fetch user information.",
-            type: "error",
-          });
-          return;
-        }
-
-        if (!userData?.user?.id) {
-          showAlert({
-            message: "No user is currently logged in.",
-            type: "error",
-          });
-          return;
-        }
-
-        const userId = userData.user.id;
-
-        const { data: childData, error: childError } = await supabase
-          .from("children")
-          .insert([
-            {
-              name: newChildName,
-              date_of_birth: newChildBirthdate,
-              avatar_url: null,
-            },
-          ])
-          .select();
-
-        if (childError) {
-          console.error("Error adding child:", childError);
-          showAlert({
-            message: "Failed to add child.",
-            type: "error",
-          });
-          return;
-        }
-
-        const childId = childData[0].id;
-
-        const { error: linkError } = await supabase
-          .from("user_children")
-          .insert([{ user_id: userId, child_id: childId }]);
-
-        if (linkError) {
-          console.error("Error linking child to user:", linkError);
-          showAlert({
-            message: "Failed to link child to user.",
-            type: "error",
-          });
-          await supabase.from("children").delete().eq("id", childId);
-          return;
-        }
-
-        setItems([...items, ...(childData || [])]);
-        showAlert({
-          message: `${newChildName} added successfully!`,
-          type: "success",
-          duration: 3000,
-        });
-        setNewChildName("");
-        setNewChildBirthdate("");
-        setModalVisible(false);
-      } catch (error) {
-        console.error("Error adding child:", error);
-        showAlert({
-          message: "Failed to add child.",
-          type: "error",
-        });
-      }
-    } else {
-      showAlert({
-        message: "Please enter a name for the child.",
-        type: "warning",
-      });
+    if (!newChildName.trim()) {
+      showAlert({ message: "Please enter a name for the child.", type: "warning" });
+      return;
     }
+    if (!userId) {
+      showAlert({ message: "No user is currently logged in.", type: "error" });
+      return;
+    }
+
+    addChild.mutate(
+      { name: newChildName, dateOfBirth: newChildBirthdate },
+      {
+        onSuccess: (child) => {
+          showAlert({
+            message: `${newChildName} added successfully!`,
+            type: "success",
+            duration: 3000,
+          });
+          setNewChildName("");
+          setNewChildBirthdate("");
+          setModalVisible(false);
+        },
+        onError: () => {
+          showAlert({ message: "Failed to add child.", type: "error" });
+        },
+      },
+    );
   };
 
-  // Updated to show child menu instead of calendar directly
   const handleChildPress = (child: Child) => {
     setSelectedChild(child);
     setCurrentView("childMenu");
   };
 
-  // Navigation handlers for child menu
   const handleBackToHome = () => {
     setCurrentView("home");
     setSelectedChild(null);
   };
 
-  const handleOpenCalendar = () => {
-    setCurrentView("calendar");
-  };
-
-  const handleOpenEconomics = () => {
-    setCurrentView("economics");
-  };
-
-  const handleOpenSettings = () => {
-    setCurrentView("settings");
-  };
-
-  const handleOpenActivities = () => {
-    setCurrentView("activities");
-  };
-
-  const handleCalendarConfirm = async (selectedDates: Date[]) => {
+  const handleCalendarConfirm = async (_selectedDates: Date[]) => {
     if (!selectedChild) return;
-
     showAlert({
       message: `Calendar events saved for ${selectedChild.name}!`,
       type: "success",
@@ -218,51 +97,25 @@ export default function HomeScreen() {
     setCurrentView("childMenu");
   };
 
-  const handleCalendarCancel = () => {
-    setCurrentView("childMenu");
-  };
-
-  const handleEconomicsBack = () => {
-    setCurrentView("childMenu");
-  };
-
-  const handleSettingsBack = () => {
-    setCurrentView("childMenu");
-  };
-
-  const handleActivitiesBack = () => {
-    setCurrentView("childMenu");
-  };
-
-  const handleChildUpdated = async () => {
-    // Refresh the child's information after update
-    if (selectedChild) {
-      const { data, error } = await supabase
-        .from("children")
-        .select("*")
-        .eq("id", selectedChild.id)
-        .single();
-
-      if (!error && data) {
-        setSelectedChild(data);
-        // Also update in the items list
-        setItems((prevItems) =>
-          prevItems.map((item) => (item.id === data.id ? data : item)),
-        );
+  const handleChildUpdated = () => {
+    queryClient.invalidateQueries({ queryKey: ["children", userId] }).then(() => {
+      if (selectedChild) {
+        const refreshed = queryClient.getQueryData<Child[]>(["children", userId]);
+        const updated = refreshed?.find((c) => c.id === selectedChild.id);
+        if (updated) setSelectedChild(updated);
       }
-    }
+    });
   };
 
-  // Render different views based on current state
   if (currentView === "childMenu" && selectedChild) {
     return (
       <ChildMenu
         child={selectedChild}
         onBack={handleBackToHome}
-        onCalendar={handleOpenCalendar}
-        onEconomics={handleOpenEconomics}
-        onSettings={handleOpenSettings}
-        onActivities={handleOpenActivities}
+        onCalendar={() => setCurrentView("calendar")}
+        onEconomics={() => setCurrentView("economics")}
+        onSettings={() => setCurrentView("settings")}
+        onActivities={() => setCurrentView("activities")}
       />
     );
   }
@@ -273,7 +126,7 @@ export default function HomeScreen() {
         childName={selectedChild.name}
         childId={selectedChild.id}
         onConfirm={handleCalendarConfirm}
-        onCancel={handleCalendarCancel}
+        onCancel={() => setCurrentView("childMenu")}
       />
     );
   }
@@ -283,7 +136,7 @@ export default function HomeScreen() {
       <Economics
         childName={selectedChild.name}
         childId={selectedChild.id}
-        onBack={handleEconomicsBack}
+        onBack={() => setCurrentView("childMenu")}
       />
     );
   }
@@ -293,7 +146,7 @@ export default function HomeScreen() {
       <ChildSettings
         childName={selectedChild.name}
         childId={selectedChild.id}
-        onBack={handleSettingsBack}
+        onBack={() => setCurrentView("childMenu")}
         onChildUpdated={handleChildUpdated}
       />
     );
@@ -304,12 +157,11 @@ export default function HomeScreen() {
       <Activities
         childName={selectedChild.name}
         childId={selectedChild.id}
-        onBack={handleActivitiesBack}
+        onBack={() => setCurrentView("childMenu")}
       />
     );
   }
 
-  // Home view (default)
   return (
     <View
       style={[
@@ -397,16 +249,13 @@ export default function HomeScreen() {
               style={[
                 styles.input,
                 {
-                  backgroundColor:
-                    Colors[colorScheme ?? "light"].inputBackground,
+                  backgroundColor: Colors[colorScheme ?? "light"].inputBackground,
                   borderColor: Colors[colorScheme ?? "light"].border,
                   color: Colors[colorScheme ?? "light"].text,
                 },
               ]}
               placeholder="Child's Name"
-              placeholderTextColor={
-                Colors[colorScheme ?? "light"].textSecondary
-              }
+              placeholderTextColor={Colors[colorScheme ?? "light"].textSecondary}
               value={newChildName}
               onChangeText={setNewChildName}
             />
@@ -414,16 +263,13 @@ export default function HomeScreen() {
               style={[
                 styles.input,
                 {
-                  backgroundColor:
-                    Colors[colorScheme ?? "light"].inputBackground,
+                  backgroundColor: Colors[colorScheme ?? "light"].inputBackground,
                   borderColor: Colors[colorScheme ?? "light"].border,
                   color: Colors[colorScheme ?? "light"].text,
                 },
               ]}
               placeholder="Child's Birthdate (YYYY-MM-DD)"
-              placeholderTextColor={
-                Colors[colorScheme ?? "light"].textSecondary
-              }
+              placeholderTextColor={Colors[colorScheme ?? "light"].textSecondary}
               value={newChildBirthdate}
               onChangeText={setNewChildBirthdate}
             />
@@ -432,8 +278,7 @@ export default function HomeScreen() {
                 style={[
                   styles.modalButton,
                   {
-                    backgroundColor:
-                      Colors[colorScheme ?? "light"].textSecondary,
+                    backgroundColor: Colors[colorScheme ?? "light"].textSecondary,
                   },
                 ]}
                 onPress={() => setModalVisible(false)}
@@ -453,6 +298,7 @@ export default function HomeScreen() {
                   { backgroundColor: Colors[colorScheme ?? "light"].primary },
                 ]}
                 onPress={handleAddNewChild}
+                disabled={addChild.isPending}
               >
                 <Text
                   style={[
@@ -460,7 +306,7 @@ export default function HomeScreen() {
                     { color: Colors[colorScheme ?? "light"].buttonText },
                   ]}
                 >
-                  Add
+                  {addChild.isPending ? "Adding..." : "Add"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -468,7 +314,6 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* iOS Alert Component */}
       <IOSAlert {...alertProps} />
     </View>
   );
@@ -479,7 +324,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     padding: 20,
-    paddingTop: 60, // Add top padding to account for removed header
+    paddingTop: 60,
   },
   logo: {
     width: 200,

@@ -2,13 +2,14 @@ import { createClient, processLock } from "@supabase/supabase-js";
 import { AppState } from "react-native";
 import "react-native-url-polyfill/auto";
 import { createStorageAdapter } from "./storageAdapter";
+import { Database } from "@/database.types";
 
 const supabaseUrl = "https://ifhmpedzbaoehjrevvlr.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlmaG1wZWR6YmFvZWhqcmV2dmxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk3Mjk3NTQsImV4cCI6MjA2NTMwNTc1NH0.3N9pJL8t3Mkr4cVxpozxCxK7mj8m7ZH47I12lIzbvWM";
 
 // Create the Supabase client with our safe storage adapter
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: createStorageAdapter(),
     autoRefreshToken: true,

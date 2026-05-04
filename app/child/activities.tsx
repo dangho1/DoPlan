@@ -1,22 +1,26 @@
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import {
+  useActivities,
+  useDeleteActivity,
+  useSaveActivity,
+  useToggleActivity,
+} from '@/hooks/queries/useActivities';
+import type { RecurringActivity } from '@/lib/types';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { supabase } from '../../lib/supabase';
-
-interface RecurringActivity {
-  id: string;
-  activity_name: string;
-  activity_type: string | null;
-  location: string | null;
-  notes: string | null;
-  color: string;
-  days_of_week: number[];
-  start_time: string;
-  end_time: string;
-  is_active: boolean;
-}
+import React, { useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 interface ActivitiesProps {
   childName: string;
@@ -25,27 +29,32 @@ interface ActivitiesProps {
 }
 
 const DAYS_OF_WEEK = [
-  { value: 0, label: 'Sun', fullName: 'Sunday' },
-  { value: 1, label: 'Mon', fullName: 'Monday' },
-  { value: 2, label: 'Tue', fullName: 'Tuesday' },
-  { value: 3, label: 'Wed', fullName: 'Wednesday' },
-  { value: 4, label: 'Thu', fullName: 'Thursday' },
-  { value: 5, label: 'Fri', fullName: 'Friday' },
-  { value: 6, label: 'Sat', fullName: 'Saturday' },
+  { value: 0, label: 'Sun' },
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
 ];
 
 const ACTIVITY_COLORS = [
-  '#007AFF', '#FF3B30', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#5856D6', '#00C7BE'
+  '#007AFF', '#FF3B30', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#5856D6', '#00C7BE',
 ];
 
 export default function Activities({ childName, childId, onBack }: ActivitiesProps) {
   const colorScheme = useColorScheme();
-  const [loading, setLoading] = useState(true);
-  const [activities, setActivities] = useState<RecurringActivity[]>([]);
+  const { data: currentUser } = useCurrentUser();
+  const userId = currentUser?.id;
+
+  const { data: activities = [], isLoading } = useActivities(childId);
+  const saveActivity = useSaveActivity(childId);
+  const deleteActivity = useDeleteActivity(childId);
+  const toggleActivity = useToggleActivity(childId);
+
   const [modalVisible, setModalVisible] = useState(false);
   const [editingActivity, setEditingActivity] = useState<RecurringActivity | null>(null);
-  
-  // Form states
+
   const [activityName, setActivityName] = useState('');
   const [activityType, setActivityType] = useState('');
   const [location, setLocation] = useState('');
@@ -54,52 +63,6 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [selectedColor, setSelectedColor] = useState(ACTIVITY_COLORS[0]);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetchActivities();
-  }, []);
-
-  const fetchActivities = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('recurring_activities')
-        .select('*')
-        .eq('child_id', childId)
-        .order('activity_name');
-
-      if (error) {
-        console.error('Error fetching activities:', error);
-        Alert.alert('Error', 'Failed to load activities.');
-      } else {
-        setActivities(data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching activities:', error);
-      Alert.alert('Error', 'Failed to load activities.');
-    }
-    setLoading(false);
-  };
-
-  const openAddModal = () => {
-    resetForm();
-    setEditingActivity(null);
-    setModalVisible(true);
-  };
-
-  const openEditModal = (activity: RecurringActivity) => {
-    setEditingActivity(activity);
-    setActivityName(activity.activity_name);
-    setActivityType(activity.activity_type || '');
-    setLocation(activity.location || '');
-    setNotes(activity.notes || '');
-    setSelectedDays(activity.days_of_week);
-    setStartTime(activity.start_time);
-    setEndTime(activity.end_time);
-    setSelectedColor(activity.color);
-    setModalVisible(true);
-  };
 
   const resetForm = () => {
     setActivityName('');
@@ -110,13 +73,30 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
     setStartTime('');
     setEndTime('');
     setSelectedColor(ACTIVITY_COLORS[0]);
+    setEditingActivity(null);
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setModalVisible(true);
+  };
+
+  const openEditModal = (activity: RecurringActivity) => {
+    setEditingActivity(activity);
+    setActivityName(activity.activity_name);
+    setActivityType(activity.activity_type || '');
+    setLocation(activity.location || '');
+    setNotes(activity.notes || '');
+    setSelectedDays(activity.days_of_week);
+    setStartTime(activity.start_time.slice(0, 5));
+    setEndTime(activity.end_time.slice(0, 5));
+    setSelectedColor(activity.color ?? ACTIVITY_COLORS[0]);
+    setModalVisible(true);
   };
 
   const toggleDay = (day: number) => {
-    setSelectedDays(prev => 
-      prev.includes(day) 
-        ? prev.filter(d => d !== day)
-        : [...prev, day].sort((a, b) => a - b)
+    setSelectedDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
     );
   };
 
@@ -133,7 +113,6 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
       Alert.alert('Error', 'Start time and end time are required.');
       return false;
     }
-    // Validate time format (HH:MM)
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
     if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
       Alert.alert('Error', 'Please use HH:MM format for times (e.g., 14:30).');
@@ -142,67 +121,32 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
     return true;
   };
 
-  const handleSave = async () => {
-    if (!validateForm()) return;
+  const handleSave = () => {
+    if (!validateForm() || !userId) return;
 
-    setSaving(true);
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
-        Alert.alert('Error', 'You must be logged in.');
-        setSaving(false);
-        return;
-      }
+    const activity = {
+      activity_name: activityName.trim(),
+      activity_type: activityType.trim() || null,
+      location: location.trim() || null,
+      notes: notes.trim() || null,
+      days_of_week: selectedDays,
+      start_time: startTime + ':00',
+      end_time: endTime + ':00',
+      color: selectedColor,
+      is_active: true,
+    };
 
-      const activityData = {
-        child_id: childId,
-        user_id: userData.user.id,
-        activity_name: activityName.trim(),
-        activity_type: activityType.trim() || null,
-        location: location.trim() || null,
-        notes: notes.trim() || null,
-        days_of_week: selectedDays,
-        start_time: startTime + ':00', // Add seconds
-        end_time: endTime + ':00',
-        color: selectedColor,
-        is_active: true,
-      };
-
-      if (editingActivity) {
-        // Update existing activity
-        const { error } = await supabase
-          .from('recurring_activities')
-          .update(activityData)
-          .eq('id', editingActivity.id);
-
-        if (error) {
-          console.error('Error updating activity:', error);
-          Alert.alert('Error', 'Failed to update activity.');
-        } else {
-          Alert.alert('Success', 'Activity updated successfully!');
+    saveActivity.mutate(
+      { activity, userId, editingId: editingActivity?.id },
+      {
+        onSuccess: () => {
+          Alert.alert('Success', editingActivity ? 'Activity updated!' : 'Activity created!');
           setModalVisible(false);
-          fetchActivities();
-        }
-      } else {
-        // Create new activity
-        const { error } = await supabase
-          .from('recurring_activities')
-          .insert([activityData]);
-
-        if (error) {
-          console.error('Error creating activity:', error);
-          Alert.alert('Error', 'Failed to create activity.');
-        } else {
-          Alert.alert('Success', 'Activity created successfully!');
-          setModalVisible(false);
-          fetchActivities();
-        }
-      }
-    } catch (error) {
-      console.error('Error saving activity:', error);
-      Alert.alert('Error', 'Failed to save activity.');
-    }
-    setSaving(false);
+          resetForm();
+        },
+        onError: () => Alert.alert('Error', 'Failed to save activity.'),
+      },
+    );
   };
 
   const handleDelete = (activity: RecurringActivity) => {
@@ -214,51 +158,27 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('recurring_activities')
-                .delete()
-                .eq('id', activity.id);
-
-              if (error) {
-                console.error('Error deleting activity:', error);
-                Alert.alert('Error', 'Failed to delete activity.');
-              } else {
-                Alert.alert('Success', 'Activity deleted successfully!');
-                fetchActivities();
-              }
-            } catch (error) {
-              console.error('Error deleting activity:', error);
-              Alert.alert('Error', 'Failed to delete activity.');
-            }
-          }
-        }
-      ]
+          onPress: () => {
+            deleteActivity.mutate(activity.id, {
+              onSuccess: () => Alert.alert('Success', 'Activity deleted.'),
+              onError: () => Alert.alert('Error', 'Failed to delete activity.'),
+            });
+          },
+        },
+      ],
     );
   };
 
-  const toggleActive = async (activity: RecurringActivity) => {
-    try {
-      const { error } = await supabase
-        .from('recurring_activities')
-        .update({ is_active: !activity.is_active })
-        .eq('id', activity.id);
-
-      if (error) {
-        console.error('Error toggling activity:', error);
-        Alert.alert('Error', 'Failed to update activity status.');
-      } else {
-        fetchActivities();
-      }
-    } catch (error) {
-      console.error('Error toggling activity:', error);
-      Alert.alert('Error', 'Failed to update activity status.');
-    }
+  const handleToggleActive = (activity: RecurringActivity) => {
+    toggleActivity.mutate(
+      { activityId: activity.id, isActive: activity.is_active ?? true },
+      {
+        onError: () => Alert.alert('Error', 'Failed to update activity status.'),
+      },
+    );
   };
 
   const formatTime = (time: string): string => {
-    // Convert "HH:MM:SS" to "HH:MM AM/PM"
     const [hours, minutes] = time.split(':');
     const hour = parseInt(hours);
     const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -266,16 +186,16 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
-  const getDaysString = (days: number[]): string => {
-    return days
+  const getDaysString = (days: number[]): string =>
+    days
       .sort((a, b) => a - b)
-      .map(day => DAYS_OF_WEEK[day].label)
+      .map((day) => DAYS_OF_WEEK[day].label)
       .join(', ');
-  };
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-      {/* Header */}
+    <View
+      style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors[colorScheme ?? 'light'].text} />
@@ -284,27 +204,44 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
           Activities - {childName}
         </Text>
         <TouchableOpacity onPress={openAddModal} style={styles.addHeaderButton}>
-          <Ionicons name="add-circle" size={28} color={Colors[colorScheme ?? 'light'].primary} />
+          <Ionicons
+            name="add-circle"
+            size={28}
+            color={Colors[colorScheme ?? 'light'].primary}
+          />
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].primary} />
         </View>
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={[styles.subtitle, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
+          <Text
+            style={[styles.subtitle, { color: Colors[colorScheme ?? 'light'].textSecondary }]}
+          >
             Manage {childName}'s weekly recurring activities and events
           </Text>
 
           {activities.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="calendar-outline" size={64} color={Colors[colorScheme ?? 'light'].textSecondary} />
-              <Text style={[styles.emptyText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
+              <Ionicons
+                name="calendar-outline"
+                size={64}
+                color={Colors[colorScheme ?? 'light'].textSecondary}
+              />
+              <Text
+                style={[styles.emptyText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}
+              >
                 No recurring activities yet
               </Text>
-              <Text style={[styles.emptySubtext, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
+              <Text
+                style={[
+                  styles.emptySubtext,
+                  { color: Colors[colorScheme ?? 'light'].textSecondary },
+                ]}
+              >
                 Tap the + button above to add your first activity
               </Text>
             </View>
@@ -315,36 +252,53 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                   key={activity.id}
                   style={[
                     styles.activityCard,
-                    { 
+                    {
                       backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
                       borderColor: Colors[colorScheme ?? 'light'].border,
-                      opacity: activity.is_active ? 1 : 0.5
-                    }
+                      opacity: activity.is_active ? 1 : 0.5,
+                    },
                   ]}
                 >
-                  <View style={[styles.activityColorBar, { backgroundColor: activity.color }]} />
-                  
+                  <View
+                    style={[
+                      styles.activityColorBar,
+                      { backgroundColor: activity.color ?? '#007AFF' },
+                    ]}
+                  />
                   <View style={styles.activityContent}>
                     <View style={styles.activityHeader}>
-                      <Text style={[styles.activityName, { color: Colors[colorScheme ?? 'light'].text }]}>
+                      <Text
+                        style={[
+                          styles.activityName,
+                          { color: Colors[colorScheme ?? 'light'].text },
+                        ]}
+                      >
                         {activity.activity_name}
                       </Text>
                       <View style={styles.activityActions}>
                         <TouchableOpacity
-                          onPress={() => toggleActive(activity)}
+                          onPress={() => handleToggleActive(activity)}
                           style={styles.actionButton}
                         >
-                          <Ionicons 
-                            name={activity.is_active ? "pause-circle" : "play-circle"} 
-                            size={24} 
-                            color={activity.is_active ? Colors[colorScheme ?? 'light'].primary : '#999'} 
+                          <Ionicons
+                            name={activity.is_active ? 'pause-circle' : 'play-circle'}
+                            size={24}
+                            color={
+                              activity.is_active
+                                ? Colors[colorScheme ?? 'light'].primary
+                                : '#999'
+                            }
                           />
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => openEditModal(activity)}
                           style={styles.actionButton}
                         >
-                          <Ionicons name="pencil" size={20} color={Colors[colorScheme ?? 'light'].primary} />
+                          <Ionicons
+                            name="pencil"
+                            size={20}
+                            color={Colors[colorScheme ?? 'light'].primary}
+                          />
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => handleDelete(activity)}
@@ -356,39 +310,77 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                     </View>
 
                     {activity.activity_type && (
-                      <Text style={[styles.activityType, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>
+                      <Text
+                        style={[
+                          styles.activityType,
+                          { color: Colors[colorScheme ?? 'light'].textSecondary },
+                        ]}
+                      >
                         {activity.activity_type}
                       </Text>
                     )}
 
                     <View style={styles.activityDetails}>
                       <View style={styles.detailRow}>
-                        <Ionicons name="time-outline" size={16} color={Colors[colorScheme ?? 'light'].textSecondary} />
-                        <Text style={[styles.detailText, { color: Colors[colorScheme ?? 'light'].text }]}>
+                        <Ionicons
+                          name="time-outline"
+                          size={16}
+                          color={Colors[colorScheme ?? 'light'].textSecondary}
+                        />
+                        <Text
+                          style={[
+                            styles.detailText,
+                            { color: Colors[colorScheme ?? 'light'].text },
+                          ]}
+                        >
                           {formatTime(activity.start_time)} - {formatTime(activity.end_time)}
                         </Text>
                       </View>
-
                       <View style={styles.detailRow}>
-                        <Ionicons name="calendar-outline" size={16} color={Colors[colorScheme ?? 'light'].textSecondary} />
-                        <Text style={[styles.detailText, { color: Colors[colorScheme ?? 'light'].text }]}>
+                        <Ionicons
+                          name="calendar-outline"
+                          size={16}
+                          color={Colors[colorScheme ?? 'light'].textSecondary}
+                        />
+                        <Text
+                          style={[
+                            styles.detailText,
+                            { color: Colors[colorScheme ?? 'light'].text },
+                          ]}
+                        >
                           {getDaysString(activity.days_of_week)}
                         </Text>
                       </View>
-
                       {activity.location && (
                         <View style={styles.detailRow}>
-                          <Ionicons name="location-outline" size={16} color={Colors[colorScheme ?? 'light'].textSecondary} />
-                          <Text style={[styles.detailText, { color: Colors[colorScheme ?? 'light'].text }]}>
+                          <Ionicons
+                            name="location-outline"
+                            size={16}
+                            color={Colors[colorScheme ?? 'light'].textSecondary}
+                          />
+                          <Text
+                            style={[
+                              styles.detailText,
+                              { color: Colors[colorScheme ?? 'light'].text },
+                            ]}
+                          >
                             {activity.location}
                           </Text>
                         </View>
                       )}
-
                       {activity.notes && (
                         <View style={styles.detailRow}>
-                          <Ionicons name="document-text-outline" size={16} color={Colors[colorScheme ?? 'light'].textSecondary} />
-                          <Text style={[styles.detailText, { color: Colors[colorScheme ?? 'light'].text }]}>
+                          <Ionicons
+                            name="document-text-outline"
+                            size={16}
+                            color={Colors[colorScheme ?? 'light'].textSecondary}
+                          />
+                          <Text
+                            style={[
+                              styles.detailText,
+                              { color: Colors[colorScheme ?? 'light'].text },
+                            ]}
+                          >
                             {activity.notes}
                           </Text>
                         </View>
@@ -408,7 +400,6 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
         </ScrollView>
       )}
 
-      {/* Add/Edit Modal */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -416,42 +407,58 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground },
+            ]}
+          >
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={[styles.modalTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
+              <Text
+                style={[styles.modalTitle, { color: Colors[colorScheme ?? 'light'].text }]}
+              >
                 {editingActivity ? 'Edit Activity' : 'New Activity'}
               </Text>
 
-              {/* Activity Name */}
-              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>Activity Name *</Text>
+              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
+                Activity Name *
+              </Text>
               <TextInput
-                style={[styles.input, { 
-                  color: Colors[colorScheme ?? 'light'].text,
-                  borderColor: Colors[colorScheme ?? 'light'].border,
-                  backgroundColor: Colors[colorScheme ?? 'light'].inputBackground
-                }]}
+                style={[
+                  styles.input,
+                  {
+                    color: Colors[colorScheme ?? 'light'].text,
+                    borderColor: Colors[colorScheme ?? 'light'].border,
+                    backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
+                  },
+                ]}
                 placeholder="e.g., Soccer Practice"
                 placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
                 value={activityName}
                 onChangeText={setActivityName}
               />
 
-              {/* Activity Type */}
-              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>Activity Type</Text>
+              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
+                Activity Type
+              </Text>
               <TextInput
-                style={[styles.input, { 
-                  color: Colors[colorScheme ?? 'light'].text,
-                  borderColor: Colors[colorScheme ?? 'light'].border,
-                  backgroundColor: Colors[colorScheme ?? 'light'].inputBackground
-                }]}
+                style={[
+                  styles.input,
+                  {
+                    color: Colors[colorScheme ?? 'light'].text,
+                    borderColor: Colors[colorScheme ?? 'light'].border,
+                    backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
+                  },
+                ]}
                 placeholder="e.g., Sports, Music, Tutoring"
                 placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
                 value={activityType}
                 onChangeText={setActivityType}
               />
 
-              {/* Days of Week */}
-              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>Days of Week *</Text>
+              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
+                Days of Week *
+              </Text>
               <View style={styles.daysContainer}>
                 {DAYS_OF_WEEK.map((day) => (
                   <TouchableOpacity
@@ -459,34 +466,46 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                     style={[
                       styles.dayButton,
                       {
-                        backgroundColor: selectedDays.includes(day.value) 
-                          ? Colors[colorScheme ?? 'light'].primary 
+                        backgroundColor: selectedDays.includes(day.value)
+                          ? Colors[colorScheme ?? 'light'].primary
                           : Colors[colorScheme ?? 'light'].inputBackground,
                         borderColor: Colors[colorScheme ?? 'light'].border,
-                      }
+                      },
                     ]}
                     onPress={() => toggleDay(day.value)}
                   >
-                    <Text style={[
-                      styles.dayButtonText,
-                      { color: selectedDays.includes(day.value) ? '#fff' : Colors[colorScheme ?? 'light'].text }
-                    ]}>
+                    <Text
+                      style={[
+                        styles.dayButtonText,
+                        {
+                          color: selectedDays.includes(day.value)
+                            ? '#fff'
+                            : Colors[colorScheme ?? 'light'].text,
+                        },
+                      ]}
+                    >
                       {day.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              {/* Time */}
               <View style={styles.timeRow}>
                 <View style={styles.timeField}>
-                  <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>Start Time *</Text>
+                  <Text
+                    style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}
+                  >
+                    Start Time *
+                  </Text>
                   <TextInput
-                    style={[styles.input, { 
-                      color: Colors[colorScheme ?? 'light'].text,
-                      borderColor: Colors[colorScheme ?? 'light'].border,
-                      backgroundColor: Colors[colorScheme ?? 'light'].inputBackground
-                    }]}
+                    style={[
+                      styles.input,
+                      {
+                        color: Colors[colorScheme ?? 'light'].text,
+                        borderColor: Colors[colorScheme ?? 'light'].border,
+                        backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
+                      },
+                    ]}
                     placeholder="HH:MM"
                     placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
                     value={startTime}
@@ -494,13 +513,20 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                   />
                 </View>
                 <View style={styles.timeField}>
-                  <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>End Time *</Text>
+                  <Text
+                    style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}
+                  >
+                    End Time *
+                  </Text>
                   <TextInput
-                    style={[styles.input, { 
-                      color: Colors[colorScheme ?? 'light'].text,
-                      borderColor: Colors[colorScheme ?? 'light'].border,
-                      backgroundColor: Colors[colorScheme ?? 'light'].inputBackground
-                    }]}
+                    style={[
+                      styles.input,
+                      {
+                        color: Colors[colorScheme ?? 'light'].text,
+                        borderColor: Colors[colorScheme ?? 'light'].border,
+                        backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
+                      },
+                    ]}
                     placeholder="HH:MM"
                     placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
                     value={endTime}
@@ -509,28 +535,37 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                 </View>
               </View>
 
-              {/* Location */}
-              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>Location</Text>
+              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
+                Location
+              </Text>
               <TextInput
-                style={[styles.input, { 
-                  color: Colors[colorScheme ?? 'light'].text,
-                  borderColor: Colors[colorScheme ?? 'light'].border,
-                  backgroundColor: Colors[colorScheme ?? 'light'].inputBackground
-                }]}
+                style={[
+                  styles.input,
+                  {
+                    color: Colors[colorScheme ?? 'light'].text,
+                    borderColor: Colors[colorScheme ?? 'light'].border,
+                    backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
+                  },
+                ]}
                 placeholder="e.g., Community Center"
                 placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
                 value={location}
                 onChangeText={setLocation}
               />
 
-              {/* Notes */}
-              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>Notes</Text>
+              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
+                Notes
+              </Text>
               <TextInput
-                style={[styles.input, styles.textArea, { 
-                  color: Colors[colorScheme ?? 'light'].text,
-                  borderColor: Colors[colorScheme ?? 'light'].border,
-                  backgroundColor: Colors[colorScheme ?? 'light'].inputBackground
-                }]}
+                style={[
+                  styles.input,
+                  styles.textArea,
+                  {
+                    color: Colors[colorScheme ?? 'light'].text,
+                    borderColor: Colors[colorScheme ?? 'light'].border,
+                    backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
+                  },
+                ]}
                 placeholder="Additional details..."
                 placeholderTextColor={Colors[colorScheme ?? 'light'].textSecondary}
                 value={notes}
@@ -539,8 +574,9 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                 numberOfLines={3}
               />
 
-              {/* Color Picker */}
-              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>Color</Text>
+              <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
+                Color
+              </Text>
               <View style={styles.colorPicker}>
                 {ACTIVITY_COLORS.map((color) => (
                   <TouchableOpacity
@@ -548,7 +584,7 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                     style={[
                       styles.colorOption,
                       { backgroundColor: color },
-                      selectedColor === color && styles.selectedColorOption
+                      selectedColor === color && styles.selectedColorOption,
                     ]}
                     onPress={() => setSelectedColor(color)}
                   >
@@ -559,24 +595,37 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                 ))}
               </View>
 
-              {/* Buttons */}
               <View style={styles.modalButtons}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelModalButton, { borderColor: Colors[colorScheme ?? 'light'].border }]}
+                  style={[
+                    styles.modalButton,
+                    styles.cancelModalButton,
+                    { borderColor: Colors[colorScheme ?? 'light'].border },
+                  ]}
                   onPress={() => setModalVisible(false)}
-                  disabled={saving}
+                  disabled={saveActivity.isPending}
                 >
-                  <Text style={[styles.cancelButtonText, { color: Colors[colorScheme ?? 'light'].text }]}>Cancel</Text>
+                  <Text
+                    style={[styles.cancelButtonText, { color: Colors[colorScheme ?? 'light'].text }]}
+                  >
+                    Cancel
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.saveModalButton, { backgroundColor: Colors[colorScheme ?? 'light'].primary }]}
+                  style={[
+                    styles.modalButton,
+                    styles.saveModalButton,
+                    { backgroundColor: Colors[colorScheme ?? 'light'].primary },
+                  ]}
                   onPress={handleSave}
-                  disabled={saving}
+                  disabled={saveActivity.isPending}
                 >
-                  {saving ? (
+                  {saveActivity.isPending ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
-                    <Text style={styles.saveButtonText}>{editingActivity ? 'Update' : 'Save'}</Text>
+                    <Text style={styles.saveButtonText}>
+                      {editingActivity ? 'Update' : 'Save'}
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -589,9 +638,7 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -600,101 +647,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
-  backButton: {
-    padding: 5,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    flex: 1,
-    marginLeft: 15,
-  },
-  addHeaderButton: {
-    padding: 5,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  subtitle: {
-    fontSize: 14,
-    marginBottom: 20,
-    lineHeight: 20,
-  },
+  backButton: { padding: 5 },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', flex: 1, marginLeft: 15 },
+  addHeaderButton: { padding: 5 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  content: { flex: 1, paddingHorizontal: 20 },
+  subtitle: { fontSize: 14, marginBottom: 20, lineHeight: 20 },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
   },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  activitiesList: {
-    gap: 15,
-    paddingBottom: 30,
-  },
+  emptyText: { fontSize: 18, fontWeight: '600', marginTop: 20, marginBottom: 8 },
+  emptySubtext: { fontSize: 14, textAlign: 'center' },
+  activitiesList: { gap: 15, paddingBottom: 30 },
   activityCard: {
     borderRadius: 12,
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
   },
-  activityColorBar: {
-    height: 6,
-    width: '100%',
-  },
-  activityContent: {
-    padding: 15,
-  },
+  activityColorBar: { height: 6, width: '100%' },
+  activityContent: { padding: 15 },
   activityHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
   },
-  activityName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    flex: 1,
-    marginRight: 10,
-  },
-  activityActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    padding: 4,
-  },
-  activityType: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    marginBottom: 12,
-  },
-  activityDetails: {
-    gap: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
-    fontSize: 14,
-    flex: 1,
-  },
+  activityName: { fontSize: 18, fontWeight: 'bold', flex: 1, marginRight: 10 },
+  activityActions: { flexDirection: 'row', gap: 8 },
+  actionButton: { padding: 4 },
+  activityType: { fontSize: 14, fontStyle: 'italic', marginBottom: 12 },
+  activityDetails: { gap: 8 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailText: { fontSize: 14, flex: 1 },
   pausedBadge: {
     position: 'absolute',
     top: 15,
@@ -704,11 +692,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  pausedText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  pausedText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -727,50 +711,20 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: 'center',
   },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
-  },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  daysContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
+  inputLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 12 },
+  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16 },
+  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  daysContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   dayButton: {
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
   },
-  dayButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  timeRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  timeField: {
-    flex: 1,
-  },
-  colorPicker: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 8,
-  },
+  dayButtonText: { fontSize: 14, fontWeight: '600' },
+  timeRow: { flexDirection: 'row', gap: 10 },
+  timeField: { flex: 1 },
+  colorPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
   colorOption: {
     width: 40,
     height: 40,
@@ -787,30 +741,10 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 20,
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  cancelModalButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-  },
-  saveModalButton: {
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  modalButton: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
+  cancelModalButton: { backgroundColor: 'transparent', borderWidth: 1 },
+  saveModalButton: {},
+  cancelButtonText: { fontSize: 16, fontWeight: '600' },
+  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
