@@ -11,7 +11,11 @@ import {
   useSendFriendRequest,
   useSentRequests,
 } from "@/hooks/queries/useFriendships";
-import type { FriendRequest, FriendWithMessages, UserSearchResult } from "@/lib/types";
+import {
+  useConversations,
+  useCreateConversation,
+} from "@/hooks/queries/useConversations";
+import type { ConversationWithDetails, FriendRequest, FriendWithMessages, UserSearchResult } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -37,6 +41,13 @@ export default function FriendshipsScreen() {
   const userId = currentUser?.id;
 
   const {
+    data: conversations = [],
+    isLoading: loadingConversations,
+    refetch: refetchConversations,
+    isRefetching: isRefetchingConversations,
+  } = useConversations(userId);
+
+  const {
     data: friends = [],
     isLoading: loadingFriends,
     refetch: refetchFriends,
@@ -55,6 +66,7 @@ export default function FriendshipsScreen() {
     isRefetching: isRefetchingSent,
   } = useSentRequests(userId);
 
+  const createConversation = useCreateConversation(userId);
   const sendFriendRequest = useSendFriendRequest(userId);
   const acceptFriendRequest = useAcceptFriendRequest(userId);
   const denyFriendRequest = useDenyFriendRequest(userId);
@@ -62,11 +74,12 @@ export default function FriendshipsScreen() {
   const removeFriend = useRemoveFriend(userId);
 
   const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [newChatModalVisible, setNewChatModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
 
-  const refreshing = isRefetchingFriends || isRefetchingRequests || isRefetchingSent;
+  const refreshing = isRefetchingConversations || isRefetchingFriends || isRefetchingRequests || isRefetchingSent;
 
   useEffect(() => {
     if (!userId) return;
@@ -84,12 +97,24 @@ export default function FriendshipsScreen() {
       )
       .subscribe();
 
+    const conversationSub = supabase
+      .channel("conversations_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversations" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["conversations", userId] });
+        },
+      )
+      .subscribe();
+
     const messageSub = supabase
       .channel("messages_changes")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "messages" },
         () => {
+          queryClient.invalidateQueries({ queryKey: ["conversations", userId] });
           queryClient.invalidateQueries({ queryKey: ["friends", userId] });
         },
       )
@@ -97,12 +122,13 @@ export default function FriendshipsScreen() {
 
     return () => {
       friendshipSub.unsubscribe();
+      conversationSub.unsubscribe();
       messageSub.unsubscribe();
     };
   }, [userId, queryClient]);
 
   const onRefresh = async () => {
-    await Promise.all([refetchFriends(), refetchRequests(), refetchSent()]);
+    await Promise.all([refetchConversations(), refetchFriends(), refetchRequests(), refetchSent()]);
   };
 
   const searchUsers = async () => {
@@ -148,6 +174,44 @@ export default function FriendshipsScreen() {
     });
   };
 
+  const handleCreateConversation = (friendId: string, friendName: string) => {
+    Alert.prompt(
+      "New Conversation",
+      `Create a new chat with ${friendName}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Create",
+          onPress: (title) => {
+            createConversation.mutate(
+              {
+                participantIds: [userId!, friendId],
+                title: title?.trim() || null,
+              },
+              {
+                onSuccess: (conversationId) => {
+                  router.push({
+                    pathname: "/chat/[conversationId]",
+                    params: {
+                      conversationId,
+                      friendId,
+                      friendName,
+                      title: title?.trim() || null,
+                    },
+                  });
+                },
+                onError: () => Alert.alert("Error", "Failed to create conversation"),
+              },
+            );
+          },
+        },
+      ],
+      "plain-text",
+      "",
+      ["text", "title"],
+    );
+  };
+
   const handleAcceptRequest = (friendshipId: string) => {
     acceptFriendRequest.mutate(friendshipId, {
       onSuccess: () => Alert.alert("Success", "Friend request accepted!"),
@@ -182,18 +246,91 @@ export default function FriendshipsScreen() {
     ]);
   };
 
+  const renderConversation = ({ item }: { item: ConversationWithDetails }) => {
+    const displayName = item.title || item.other_participant_name || "Conversation";
+    return (
+      <TouchableOpacity
+        style={[
+          styles.friendItem,
+          { borderBottomColor: Colors[colorScheme ?? "light"].tabIconDefault },
+        ]}
+        onPress={() =>
+          router.push({
+            pathname: "/chat/[conversationId]",
+            params: {
+              conversationId: item.conversation_id,
+              friendId: item.other_participant_id || "",
+              friendName: item.other_participant_name || "",
+              title: item.title || null,
+            },
+          })
+        }
+      >
+        <View style={styles.friendInfo}>
+          <View style={styles.friendHeader}>
+            <Text
+              style={[styles.friendName, { color: Colors[colorScheme ?? "light"].text }]}
+              numberOfLines={1}
+            >
+              {displayName}
+            </Text>
+            {(item.unread_count ?? 0) > 0 && (
+              <View
+                style={[
+                  styles.unreadBadge,
+                  { backgroundColor: Colors[colorScheme ?? "light"].tint },
+                ]}
+              >
+                <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
+              </View>
+            )}
+          </View>
+          {item.last_message ? (
+            <Text
+              style={[
+                styles.lastMessage,
+                { color: Colors[colorScheme ?? "light"].tabIconDefault },
+              ]}
+              numberOfLines={1}
+            >
+              {item.last_message}
+            </Text>
+          ) : (
+            <Text
+              style={[
+                styles.noMessages,
+                { color: Colors[colorScheme ?? "light"].tabIconDefault },
+              ]}
+            >
+              No messages yet - Tap to chat!
+            </Text>
+          )}
+          {item.last_message_time && (
+            <Text
+              style={[
+                styles.messageTime,
+                { color: Colors[colorScheme ?? "light"].tabIconDefault },
+              ]}
+            >
+              {new Date(item.last_message_time).toLocaleString()}
+            </Text>
+          )}
+        </View>
+        <Text
+          style={[styles.chevron, { color: Colors[colorScheme ?? "light"].tabIconDefault }]}
+        >
+          ›
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   const renderFriend = ({ item }: { item: FriendWithMessages }) => (
-    <TouchableOpacity
+    <View
       style={[
         styles.friendItem,
         { borderBottomColor: Colors[colorScheme ?? "light"].tabIconDefault },
       ]}
-      onPress={() =>
-        router.push({
-          pathname: "/chat/[friendId]",
-          params: { friendId: item.user_id, friendName: item.display_name },
-        })
-      }
     >
       <View style={styles.friendInfo}>
         <View style={styles.friendHeader}>
@@ -202,54 +339,18 @@ export default function FriendshipsScreen() {
           >
             {item.display_name}
           </Text>
-          {item.unread_count > 0 && (
-            <View
-              style={[
-                styles.unreadBadge,
-                { backgroundColor: Colors[colorScheme ?? "light"].tint },
-              ]}
-            >
-              <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
-            </View>
-          )}
         </View>
-        {item.last_message ? (
-          <Text
-            style={[
-              styles.lastMessage,
-              { color: Colors[colorScheme ?? "light"].tabIconDefault },
-            ]}
-            numberOfLines={1}
-          >
-            {item.last_message}
-          </Text>
-        ) : (
-          <Text
-            style={[
-              styles.noMessages,
-              { color: Colors[colorScheme ?? "light"].tabIconDefault },
-            ]}
-          >
-            No messages yet - Tap to chat!
-          </Text>
-        )}
-        {item.last_message_time && (
-          <Text
-            style={[
-              styles.messageTime,
-              { color: Colors[colorScheme ?? "light"].tabIconDefault },
-            ]}
-          >
-            {new Date(item.last_message_time).toLocaleString()}
-          </Text>
-        )}
       </View>
-      <Text
-        style={[styles.chevron, { color: Colors[colorScheme ?? "light"].tabIconDefault }]}
+      <TouchableOpacity
+        style={[
+          styles.newChatButton,
+          { backgroundColor: Colors[colorScheme ?? "light"].tint },
+        ]}
+        onPress={() => handleCreateConversation(item.user_id, item.display_name)}
       >
-        ›
-      </Text>
-    </TouchableOpacity>
+        <Text style={styles.newChatButtonText}>New Chat</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   const renderFriendRequest = ({ item }: { item: FriendRequest }) => (
@@ -376,7 +477,9 @@ export default function FriendshipsScreen() {
     </TouchableOpacity>
   );
 
-  if (loadingFriends) {
+  const loading = loadingConversations || loadingFriends;
+
+  if (loading) {
     return (
       <View
         style={[
@@ -390,7 +493,7 @@ export default function FriendshipsScreen() {
             { backgroundColor: Colors[colorScheme ?? "light"].tint },
           ]}
         >
-          <Text style={styles.headerTitle}>Friends</Text>
+          <Text style={styles.headerTitle}>Messages</Text>
         </View>
         <View style={styles.loadingContainer}>
           <Text style={{ color: Colors[colorScheme ?? "light"].text }}>Loading...</Text>
@@ -413,12 +516,20 @@ export default function FriendshipsScreen() {
         ]}
       >
         <Text style={styles.headerTitle}>Messages</Text>
-        <TouchableOpacity
-          style={styles.addFriendButton}
-          onPress={() => setSearchModalVisible(true)}
-        >
-          <Text style={styles.addFriendButtonText}>+</Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => setNewChatModalVisible(true)}
+          >
+            <Text style={styles.headerButtonText}>+</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => setSearchModalVisible(true)}
+          >
+            <Text style={styles.headerButtonText}>👤</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -469,9 +580,9 @@ export default function FriendshipsScreen() {
                   { color: Colors[colorScheme ?? "light"].text },
                 ]}
               >
-                Conversations ({friends.length})
+                Chats ({conversations.length})
               </Text>
-              {friends.length === 0 ? (
+              {conversations.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Text
                     style={[
@@ -479,17 +590,35 @@ export default function FriendshipsScreen() {
                       { color: Colors[colorScheme ?? "light"].tabIconDefault },
                     ]}
                   >
-                    No friends yet. Tap + to add friends and start chatting!
+                    No chats yet. Tap + to start a new conversation!
                   </Text>
                 </View>
               ) : (
-                friends.map((friend) => (
-                  <View key={friend.friendship_id}>
-                    {renderFriend({ item: friend })}
+                conversations.map((conversation) => (
+                  <View key={conversation.conversation_id}>
+                    {renderConversation({ item: conversation })}
                   </View>
                 ))
               )}
             </View>
+
+            {friends.length > 0 && (
+              <View style={styles.section}>
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: Colors[colorScheme ?? "light"].text },
+                  ]}
+                >
+                  Friends (tap to create new chat)
+                </Text>
+                {friends.map((friend) => (
+                  <View key={friend.friendship_id}>
+                    {renderFriend({ item: friend })}
+                  </View>
+                ))}
+              </View>
+            )}
           </>
         }
         refreshControl={
@@ -500,6 +629,97 @@ export default function FriendshipsScreen() {
           />
         }
       />
+
+      <Modal
+        visible={newChatModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View
+          style={[
+            styles.modalContainer,
+            { backgroundColor: Colors[colorScheme ?? "light"].background },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalHeader,
+              {
+                borderBottomColor: Colors[colorScheme ?? "light"].tabIconDefault,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              onPress={() => {
+                setNewChatModalVisible(false);
+              }}
+            >
+              <Text
+                style={[
+                  styles.modalCancelText,
+                  { color: Colors[colorScheme ?? "light"].tint },
+                ]}
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            <Text
+              style={[
+                styles.modalTitle,
+                { color: Colors[colorScheme ?? "light"].text },
+              ]}
+            >
+              New Chat
+            </Text>
+            <View style={styles.modalHeaderPlaceholder} />
+          </View>
+
+          <View style={styles.friendsListContainer}>
+            {friends.map((friend) => (
+              <TouchableOpacity
+                key={friend.user_id}
+                style={[
+                  styles.friendSelectItem,
+                  { borderBottomColor: Colors[colorScheme ?? "light"].tabIconDefault },
+                ]}
+                onPress={() => {
+                  setNewChatModalVisible(false);
+                  handleCreateConversation(friend.user_id, friend.display_name);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.friendSelectName,
+                    { color: Colors[colorScheme ?? "light"].text },
+                  ]}
+                >
+                  {friend.display_name}
+                </Text>
+                <Text
+                  style={[
+                    styles.friendSelectEmail,
+                    { color: Colors[colorScheme ?? "light"].tabIconDefault },
+                  ]}
+                >
+                  {friend.email}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            {friends.length === 0 && (
+              <View style={styles.emptyState}>
+                <Text
+                  style={[
+                    styles.emptyStateText,
+                    { color: Colors[colorScheme ?? "light"].tabIconDefault },
+                  ]}
+                >
+                  No friends yet. Add friends first!
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={searchModalVisible}
@@ -606,7 +826,11 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
   },
-  addFriendButton: {
+  headerButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  headerButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -614,7 +838,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  addFriendButtonText: { color: "white", fontSize: 24, fontWeight: "bold" },
+  headerButtonText: { color: "white", fontSize: 18, fontWeight: "bold" },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   section: { paddingTop: 16 },
   sectionTitle: {
@@ -650,6 +874,12 @@ const styles = StyleSheet.create({
   noMessages: { fontSize: 14, marginBottom: 4, fontStyle: "italic" },
   messageTime: { fontSize: 12 },
   chevron: { fontSize: 24, marginLeft: 8 },
+  newChatButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  newChatButtonText: { color: "white", fontWeight: "bold", fontSize: 12 },
   requestItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -692,6 +922,13 @@ const styles = StyleSheet.create({
   modalCancelText: { fontSize: 16 },
   modalTitle: { fontSize: 18, fontWeight: "bold" },
   modalHeaderPlaceholder: { width: 60 },
+  friendsListContainer: { flex: 1, padding: 16 },
+  friendSelectItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  friendSelectName: { fontSize: 16, fontWeight: "600" },
+  friendSelectEmail: { fontSize: 14, marginTop: 2 },
   searchContainer: {
     flexDirection: "row",
     padding: 16,
