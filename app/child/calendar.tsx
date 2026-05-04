@@ -1005,20 +1005,22 @@ export default function Calendar({
             value={
               editDateInputText ||
               (selectedEvent?.start_time
-                ? new Date(selectedEvent.start_time).toISOString().split("T")[0]
+                ? formatLocalDateInput(new Date(selectedEvent.start_time))
                 : "")
             }
             onChangeText={(text) => {
               setEditDateInputText(text);
               if (text.length === 10 && selectedEvent) {
-                const newDate = new Date(text);
-                if (!Number.isNaN(newDate.getTime())) {
-                  const timeStr = selectedEvent.start_time.includes("T")
-                    ? selectedEvent.start_time.split("T")[1]
-                    : selectedEvent.start_time;
-                  const endTimeStr = selectedEvent.end_time.includes("T")
-                    ? selectedEvent.end_time.split("T")[1]
-                    : selectedEvent.end_time;
+                const newDate = parseLocalDateInput(text);
+                if (newDate && !Number.isNaN(newDate.getTime())) {
+                  const startParts = selectedEvent.start_time?.split("T");
+                  const endParts = selectedEvent.end_time?.split("T");
+                  const timeStr = startParts && startParts.length > 1
+                    ? startParts[1].split(".")[0]
+                    : "00:00:00";
+                  const endTimeStr = endParts && endParts.length > 1
+                    ? endParts[1].split(".")[0]
+                    : "23:59:59";
 
                   setSelectedEvent({
                     ...selectedEvent,
@@ -1030,11 +1032,10 @@ export default function Calendar({
             }}
             onFocus={() => {
               if (selectedEvent?.start_time) {
-                setEditDateInputText(
-                  new Date(selectedEvent.start_time)
-                    .toISOString()
-                    .split("T")[0],
-                );
+                const date = new Date(selectedEvent.start_time);
+                if (!Number.isNaN(date.getTime())) {
+                  setEditDateInputText(formatLocalDateInput(date));
+                }
               }
             }}
             onBlur={() => {
@@ -1085,20 +1086,23 @@ export default function Calendar({
               ]}
               value={
                 selectedEvent?.start_time
-                  ? selectedEvent.start_time.includes("T")
-                    ? selectedEvent.start_time.split("T")[1].substring(0, 5)
-                    : selectedEvent.start_time
+                  ? (() => {
+                      const parts = selectedEvent.start_time.split("T");
+                      if (parts.length < 2) return "";
+                      return parts[1].substring(0, 5);
+                    })()
                   : ""
               }
               onChangeText={(text) => {
                 if (!selectedEvent) return;
-                const dateStr = selectedEvent.start_time.includes("T")
-                  ? selectedEvent.start_time.split("T")[0]
-                  : new Date().toISOString().split("T")[0];
-                setSelectedEvent({
-                  ...selectedEvent,
-                  start_time: `${dateStr}T${text}:00`,
-                });
+                const parts = selectedEvent.start_time.split("T");
+                const dateStr = parts.length > 0 ? parts[0] : new Date().toISOString().split("T")[0];
+                if (/^\d{0,2}:\d{0,2}$/.test(text)) {
+                  setSelectedEvent({
+                    ...selectedEvent,
+                    start_time: `${dateStr}T${text}`,
+                  });
+                }
               }}
               placeholder="09:00"
               placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
@@ -1125,20 +1129,23 @@ export default function Calendar({
               ]}
               value={
                 selectedEvent?.end_time
-                  ? selectedEvent.end_time.includes("T")
-                    ? selectedEvent.end_time.split("T")[1].substring(0, 5)
-                    : selectedEvent.end_time
+                  ? (() => {
+                      const parts = selectedEvent.end_time.split("T");
+                      if (parts.length < 2) return "";
+                      return parts[1].substring(0, 5);
+                    })()
                   : ""
               }
               onChangeText={(text) => {
                 if (!selectedEvent) return;
-                const dateStr = selectedEvent.end_time.includes("T")
-                  ? selectedEvent.end_time.split("T")[0]
-                  : new Date().toISOString().split("T")[0];
-                setSelectedEvent({
-                  ...selectedEvent,
-                  end_time: `${dateStr}T${text}:00`,
-                });
+                const parts = selectedEvent.end_time.split("T");
+                const dateStr = parts.length > 0 ? parts[0] : new Date().toISOString().split("T")[0];
+                if (/^\d{0,2}:\d{0,2}$/.test(text)) {
+                  setSelectedEvent({
+                    ...selectedEvent,
+                    end_time: `${dateStr}T${text}`,
+                  });
+                }
               }}
               placeholder="17:00"
               placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
@@ -1202,12 +1209,24 @@ export default function Calendar({
             onPress={async () => {
               if (!selectedEvent) return;
               try {
+                const normalizeTime = (timeStr: string) => {
+                  const parts = timeStr.split("T");
+                  if (parts.length < 2) return timeStr;
+                  const datePart = parts[0];
+                  const timePart = parts[1];
+                  const timeComponents = timePart.split(":");
+                  const hours = timeComponents[0]?.padStart(2, "0") || "00";
+                  const minutes = timeComponents[1]?.padStart(2, "0") || "00";
+                  const seconds = timeComponents[2]?.padStart(2, "0") || "00";
+                  return `${datePart}T${hours}:${minutes}:${seconds}`;
+                };
+
                 const { error } = await supabase
                   .from("calendar_events")
                   .update({
                     activity_name: selectedEvent.activity_name,
-                    start_time: selectedEvent.start_time,
-                    end_time: selectedEvent.end_time,
+                    start_time: normalizeTime(selectedEvent.start_time),
+                    end_time: normalizeTime(selectedEvent.end_time),
                   })
                   .eq("id", selectedEvent.id);
                 if (error) throw error;
@@ -1215,7 +1234,7 @@ export default function Calendar({
                 await rescheduleEventAlertFromPreference({
                   eventId: selectedEvent.id,
                   title: selectedEvent.activity_name,
-                  startTimeISO: selectedEvent.start_time,
+                  startTimeISO: normalizeTime(selectedEvent.start_time),
                   childName: resolvedChildName,
                 });
 
