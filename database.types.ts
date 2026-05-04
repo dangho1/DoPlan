@@ -580,6 +580,7 @@ export type Database = {
         Returns: Json;
       };
       delete_my_account: { Args: never; Returns: undefined };
+      delete_child: { Args: { child_uuid: string }; Returns: undefined };
       email_exists_for_reset: {
         Args: { input_email: string };
         Returns: boolean;
