@@ -4,15 +4,15 @@ import * as Linking from "expo-linking";
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    Keyboard,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  Keyboard,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -23,7 +23,7 @@ import { isBrowser } from "../lib/platformUtils";
 import { clearSupabaseStorage } from "../lib/storageAdapter";
 import { supabase } from "../lib/supabase";
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -89,11 +89,6 @@ export default function RootLayout() {
     };
 
     checkPasswordRecovery();
-
-    if (!isBrowser()) {
-      setLoading(false);
-      return;
-    }
 
     supabase.auth
       .getSession()
