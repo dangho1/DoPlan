@@ -236,9 +236,66 @@ export type Database = {
           },
         ];
       };
+      conversations: {
+        Row: {
+          created_at: string | null;
+          created_by: string;
+          id: string;
+          participant_ids: string[];
+          title: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          created_at?: string | null;
+          created_by: string;
+          id?: string;
+          participant_ids: string[];
+          title?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          created_at?: string | null;
+          created_by?: string;
+          id?: string;
+          participant_ids?: string[];
+          title?: string | null;
+          updated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      conversation_participants: {
+        Row: {
+          conversation_id: string;
+          id: string;
+          joined_at: string | null;
+          user_id: string;
+        };
+        Insert: {
+          conversation_id: string;
+          id?: string;
+          joined_at?: string | null;
+          user_id: string;
+        };
+        Update: {
+          conversation_id?: string;
+          id?: string;
+          joined_at?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "conversation_participants_conversation_id_fkey";
+            columns: ["conversation_id"];
+            isOneToOne: false;
+            referencedRelation: "conversations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       messages: {
         Row: {
           content: string;
+          conversation_id: string | null;
           created_at: string | null;
           id: string;
           read: boolean | null;
@@ -248,6 +305,7 @@ export type Database = {
         };
         Insert: {
           content: string;
+          conversation_id?: string | null;
           created_at?: string | null;
           id?: string;
           read?: boolean | null;
@@ -257,6 +315,7 @@ export type Database = {
         };
         Update: {
           content?: string;
+          conversation_id?: string | null;
           created_at?: string | null;
           id?: string;
           read?: boolean | null;
@@ -265,6 +324,13 @@ export type Database = {
           updated_at?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey";
+            columns: ["conversation_id"];
+            isOneToOne: false;
+            referencedRelation: "conversations";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "messages_receiver_id_fkey";
             columns: ["receiver_id"];
@@ -488,36 +554,22 @@ export type Database = {
       };
       conversation_list: {
         Row: {
-          content: string | null;
-          conversation_key: string | null;
-          created_at: string | null;
-          id: string | null;
-          read: boolean | null;
-          receiver_avatar: string | null;
-          receiver_email: string | null;
-          receiver_id: string | null;
-          receiver_name: string | null;
+          conversation_created_at: string | null;
+          conversation_id: string | null;
+          created_by: string | null;
+          last_message: string | null;
+          last_message_id: string | null;
+          last_message_read: boolean | null;
+          last_message_sender_id: string | null;
+          last_message_time: string | null;
+          participant_count: number | null;
+          participant_ids: string[] | null;
           sender_avatar: string | null;
           sender_email: string | null;
-          sender_id: string | null;
           sender_name: string | null;
+          title: string | null;
         };
-        Relationships: [
-          {
-            foreignKeyName: "messages_receiver_id_fkey";
-            columns: ["receiver_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
-          },
-          {
-            foreignKeyName: "messages_sender_id_fkey";
-            columns: ["sender_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
-          },
-        ];
+        Relationships: [];
       };
       friendships_with_profiles: {
         Row: {
@@ -593,6 +645,14 @@ export type Database = {
           p_last_name: string;
           p_preferred?: string;
           p_user_id: string;
+        };
+        Returns: string;
+      };
+      create_conversation: {
+        Args: {
+          p_created_by: string;
+          p_participant_ids: string[];
+          p_title?: string;
         };
         Returns: string;
       };
