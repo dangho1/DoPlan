@@ -9,6 +9,7 @@ import {
 } from "@/hooks/queries/useExpenses";
 import type { Expense } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
@@ -26,12 +27,19 @@ import {
 } from "react-native";
 
 interface EconomicsProps {
-  childName: string;
-  childId: string;
-  onBack: () => void;
+  childName?: string;
+  childId?: string;
+  onBack?: () => void;
 }
 
 export default function Economics({ childName, childId, onBack }: EconomicsProps) {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ childName?: string; childId?: string }>();
+  const resolvedChildName =
+    childName ?? (typeof params.childName === "string" ? params.childName : "");
+  const resolvedChildId =
+    childId ?? (typeof params.childId === "string" ? params.childId : "");
+  const handleBack = onBack ?? (() => router.back());
   const colorScheme = useColorScheme();
   const expenseDescriptionAccessoryId = "economicsExpenseDescriptionInputAccessory";
   const expenseAmountAccessoryId = "economicsExpenseAmountInputAccessory";
@@ -40,10 +48,10 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
   const { data: currentUser } = useCurrentUser();
   const userId = currentUser?.id;
 
-  const { data: expenses = [], isLoading } = useExpenses(childId);
-  const { data: parents = [] } = useChildParents(childId);
-  const saveExpense = useSaveExpense(childId);
-  const deleteExpense = useDeleteExpense(childId);
+  const { data: expenses = [], isLoading } = useExpenses(resolvedChildId);
+  const { data: parents = [] } = useChildParents(resolvedChildId);
+  const saveExpense = useSaveExpense(resolvedChildId);
+  const deleteExpense = useDeleteExpense(resolvedChildId);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -303,7 +311,7 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
       ]}
     >
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons
             name="arrow-back"
             size={24}
@@ -313,7 +321,7 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
         <Text
           style={[styles.headerTitle, { color: Colors[colorScheme ?? "light"].text }]}
         >
-          Expenses - {childName}
+          Expenses - {resolvedChildName}
         </Text>
       </View>
 

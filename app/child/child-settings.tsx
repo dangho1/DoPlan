@@ -2,6 +2,7 @@ import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -30,9 +31,9 @@ interface Parent {
 }
 
 interface ChildSettingsProps {
-  childName: string;
-  childId: string;
-  onBack: () => void;
+  childName?: string;
+  childId?: string;
+  onBack?: () => void;
   onChildUpdated?: () => void; // Optional callback when child info is updated
 }
 
@@ -42,6 +43,13 @@ export default function ChildSettings({
   onBack,
   onChildUpdated,
 }: ChildSettingsProps) {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ childName?: string; childId?: string }>();
+  const resolvedChildName =
+    childName ?? (typeof params.childName === "string" ? params.childName : "");
+  const resolvedChildId =
+    childId ?? (typeof params.childId === "string" ? params.childId : "");
+  const handleBack = onBack ?? (() => router.back());
   const colorScheme = useColorScheme();
   const scrollViewRef = useRef<ScrollView | null>(null);
   const refNameInput = useRef<TextInput | null>(null);
@@ -57,7 +65,7 @@ export default function ChildSettings({
 
   // Child info editing states
   const [editingChild, setEditingChild] = useState(false);
-  const [editedName, setEditedName] = useState(childName);
+  const [editedName, setEditedName] = useState(resolvedChildName);
   const [editedBirthDate, setEditedBirthDate] = useState("");
   const [childBirthDate, setChildBirthDate] = useState("");
   const [childAvatarUrl, setChildAvatarUrl] = useState<string | null>(null);
@@ -152,7 +160,7 @@ export default function ChildSettings({
         await supabase
           .from("user_children")
           .select("user_id")
-          .eq("child_id", childId);
+          .eq("child_id", resolvedChildId);
 
       if (userChildrenError) {
         console.error("Error fetching user_children:", userChildrenError);
@@ -194,7 +202,7 @@ export default function ChildSettings({
       const { data, error } = await supabase
         .from("children")
         .select("name, date_of_birth, avatar_url")
-        .eq("id", childId)
+        .eq("id", resolvedChildId)
         .single();
 
       if (error) {
@@ -251,7 +259,7 @@ export default function ChildSettings({
       const response = await fetch(selectedAsset.uri);
       const fileBody = await response.arrayBuffer();
       const fileExtension = getAvatarFileExtension(selectedAsset);
-      const filePath = `${user.id}/children/${childId}/avatar-${Date.now()}.${fileExtension}`;
+      const filePath = `${user.id}/children/${resolvedChildId}/avatar-${Date.now()}.${fileExtension}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
@@ -275,7 +283,7 @@ export default function ChildSettings({
       const { error: updateError } = await supabase
         .from("children")
         .update({ avatar_url: publicUrlData.publicUrl })
-        .eq("id", childId);
+        .eq("id", resolvedChildId);
 
       if (updateError) {
         throw updateError;
@@ -327,7 +335,7 @@ export default function ChildSettings({
   };
 
   const handleCancelEdit = () => {
-    setEditedName(childName);
+    setEditedName(resolvedChildName);
     setEditedBirthDate(childBirthDate);
     setEditingChild(false);
   };
@@ -355,7 +363,7 @@ export default function ChildSettings({
           name: editedName.trim(),
           date_of_birth: editedBirthDate || null,
         })
-        .eq("id", childId);
+        .eq("id", resolvedChildId);
 
       if (error) {
         console.error("Error updating child:", error);
@@ -402,7 +410,7 @@ export default function ChildSettings({
         .from("user_children")
         .select("*")
         .eq("user_id", userData.user_id)
-        .eq("child_id", childId)
+        .eq("child_id", resolvedChildId)
         .single();
 
       if (existingLink) {
@@ -417,7 +425,7 @@ export default function ChildSettings({
       // Add the link
       const { error: linkError } = await supabase
         .from("user_children")
-        .insert([{ user_id: userData.user_id, child_id: childId }]);
+        .insert([{ user_id: userData.user_id, child_id: resolvedChildId }]);
 
       if (linkError) {
         console.error("Error linking parent:", linkError);
@@ -425,7 +433,7 @@ export default function ChildSettings({
       } else {
         Alert.alert(
           "Success",
-          `${userData.display_name || userData.email} has been granted access to ${childName}.`,
+          `${userData.display_name || userData.email} has been granted access to ${resolvedChildName}.`,
         );
         setSearchEmail("");
         fetchParents();
@@ -450,7 +458,7 @@ export default function ChildSettings({
 
     Alert.alert(
       "Remove Access",
-      `Remove ${parent.display_name || parent.email}'s access to ${childName}?`,
+      `Remove ${parent.display_name || parent.email}'s access to ${resolvedChildName}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -463,7 +471,7 @@ export default function ChildSettings({
                   .from("user_children")
                   .delete()
                   .eq("user_id", parent.user_id)
-                  .eq("child_id", childId);
+                  .eq("child_id", resolvedChildId);
 
                 if (error) {
                   console.error("Error removing parent:", error);
@@ -492,7 +500,7 @@ export default function ChildSettings({
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons
             name="arrow-back"
             size={24}
@@ -505,7 +513,7 @@ export default function ChildSettings({
             { color: Colors[colorScheme ?? "light"].text },
           ]}
         >
-          Settings - {childName}
+          Settings - {resolvedChildName}
         </Text>
       </View>
 
@@ -543,7 +551,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            Update {childName}'s basic information
+            Update {resolvedChildName}'s basic information
           </Text>
 
           <View
@@ -777,7 +785,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            Manage which parents have access to {childName}'s information
+            Manage which parents have access to {resolvedChildName}'s information
           </Text>
 
           {/* Add Parent */}
@@ -940,7 +948,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            All parents with access can view and manage {childName}'s calendar,
+            All parents with access can view and manage {resolvedChildName}'s calendar,
             expenses, and other information.
           </Text>
         </View>

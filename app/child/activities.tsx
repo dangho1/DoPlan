@@ -9,6 +9,7 @@ import {
 } from '@/hooks/queries/useActivities';
 import type { RecurringActivity } from '@/lib/types';
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -23,9 +24,9 @@ import {
 } from 'react-native';
 
 interface ActivitiesProps {
-  childName: string;
-  childId: string;
-  onBack: () => void;
+  childName?: string;
+  childId?: string;
+  onBack?: () => void;
 }
 
 const DAYS_OF_WEEK = [
@@ -43,14 +44,22 @@ const ACTIVITY_COLORS = [
 ];
 
 export default function Activities({ childName, childId, onBack }: ActivitiesProps) {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ childName?: string; childId?: string }>();
+  const resolvedChildName =
+    childName ?? (typeof params.childName === 'string' ? params.childName : '');
+  const resolvedChildId =
+    childId ?? (typeof params.childId === 'string' ? params.childId : '');
+  const handleBack = onBack ?? (() => router.back());
+
   const colorScheme = useColorScheme();
   const { data: currentUser } = useCurrentUser();
   const userId = currentUser?.id;
 
-  const { data: activities = [], isLoading } = useActivities(childId);
-  const saveActivity = useSaveActivity(childId);
-  const deleteActivity = useDeleteActivity(childId);
-  const toggleActivity = useToggleActivity(childId);
+  const { data: activities = [], isLoading } = useActivities(resolvedChildId);
+  const saveActivity = useSaveActivity(resolvedChildId);
+  const deleteActivity = useDeleteActivity(resolvedChildId);
+  const toggleActivity = useToggleActivity(resolvedChildId);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingActivity, setEditingActivity] = useState<RecurringActivity | null>(null);
@@ -197,11 +206,11 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
       style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}
     >
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors[colorScheme ?? 'light'].text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
-          Activities - {childName}
+          Activities - {resolvedChildName}
         </Text>
         <TouchableOpacity onPress={openAddModal} style={styles.addHeaderButton}>
           <Ionicons

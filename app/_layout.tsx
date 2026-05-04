@@ -1,4 +1,5 @@
 import { Session } from "@supabase/supabase-js";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
@@ -21,6 +22,8 @@ import { useColorScheme } from "../hooks/useColorScheme";
 import { isBrowser } from "../lib/platformUtils";
 import { clearSupabaseStorage } from "../lib/storageAdapter";
 import { supabase } from "../lib/supabase";
+
+const queryClient = new QueryClient()
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -235,67 +238,73 @@ export default function RootLayout() {
 
   if (loading) {
     return (
-      <GestureHandlerRootView style={styles.gestureRoot}>
-        <SafeAreaProvider>
-          <View style={styles.keyboardContainer}>
-            <View
-              style={{
-                flex: 1,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <ActivityIndicator size="large" />
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={styles.gestureRoot}>
+          <SafeAreaProvider>
+            <View style={styles.keyboardContainer}>
+              <View
+                style={{
+                  flex: 1,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <ActivityIndicator size="large" />
+              </View>
+              {renderKeyboardDismissBar()}
             </View>
-            {renderKeyboardDismissBar()}
-          </View>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
     );
   }
 
   if (!session || isPasswordRecovery) {
     return (
-      <GestureHandlerRootView style={styles.gestureRoot}>
-        <SafeAreaProvider>
-          <View style={styles.keyboardContainer}>
-            <Auth
-              forceShow={isPasswordRecovery}
-              onPasswordRecoveryComplete={() => setIsPasswordRecovery(false)}
-            />
-            {renderKeyboardDismissBar()}
-          </View>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={styles.gestureRoot}>
+          <SafeAreaProvider>
+            <View style={styles.keyboardContainer}>
+              <Auth
+                forceShow={isPasswordRecovery}
+                onPasswordRecoveryComplete={() => setIsPasswordRecovery(false)}
+              />
+              {renderKeyboardDismissBar()}
+            </View>
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
     );
   }
 
   return (
-    <GestureHandlerRootView style={styles.gestureRoot}>
-      <SafeAreaProvider>
-        <View style={styles.keyboardContainer}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-            }}
-          >
-            <Stack.Screen
-              name="(tabs)"
-              options={{
+    <QueryClientProvider client={queryClient}>
+      <GestureHandlerRootView style={styles.gestureRoot}>
+        <SafeAreaProvider>
+          <View style={styles.keyboardContainer}>
+            <Stack
+              screenOptions={{
                 headerShown: false,
               }}
-            />
-            <Stack.Screen
-              name="settings"
-              options={{
-                headerShown: false,
-              }}
-            />
-          </Stack>
-          {renderKeyboardDismissBar()}
-        </View>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+            >
+              <Stack.Screen
+                name="(tabs)"
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="settings"
+                options={{
+                  headerShown: false,
+                }}
+              />
+            </Stack>
+            {renderKeyboardDismissBar()}
+          </View>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </QueryClientProvider>
   );
 }
 

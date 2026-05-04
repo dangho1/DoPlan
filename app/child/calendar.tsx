@@ -1,5 +1,6 @@
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -53,18 +54,23 @@ import {
 } from "./calendar/utils";
 
 interface CalendarProps {
-  childName: string;
-  childId: string;
-  onConfirm: (selectedDates: Date[]) => void;
-  onCancel: () => void;
+  childName?: string;
+  childId?: string;
+  onCancel?: () => void;
 }
 
 export default function Calendar({
   childName,
   childId,
-  onConfirm,
   onCancel,
 }: CalendarProps) {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ childName?: string; childId?: string }>();
+  const resolvedChildName =
+    childName ?? (typeof params.childName === "string" ? params.childName : "");
+  const resolvedChildId =
+    childId ?? (typeof params.childId === "string" ? params.childId : "");
+  const handleCancel = onCancel ?? (() => router.back());
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
   const isDarkMode = (colorScheme ?? "light") === "dark";
@@ -143,7 +149,7 @@ export default function Calendar({
 
   useEffect(() => {
     loadData();
-  }, [childId, currentMonth]);
+  }, [resolvedChildId, currentMonth]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => {
@@ -205,7 +211,7 @@ export default function Calendar({
         await supabase
           .from("user_children")
           .select("user_id")
-          .eq("child_id", childId);
+          .eq("child_id", resolvedChildId);
 
       if (userChildrenError) {
         console.error("Error fetching user_children:", userChildrenError);
@@ -213,7 +219,7 @@ export default function Calendar({
       }
 
       if (!userChildrenData || userChildrenData.length === 0) {
-        console.log("No parents found for child:", childId);
+        console.log("No parents found for child:", resolvedChildId);
         setParents([]);
         return;
       }
@@ -296,7 +302,7 @@ export default function Calendar({
         .select(
           "id, start_time, end_time, activity_name, child_id, notes, location",
         )
-        .eq("child_id", childId)
+        .eq("child_id", resolvedChildId)
         .gte("start_time", firstDay.toISOString())
         .lte("start_time", lastDay.toISOString());
 
@@ -318,13 +324,13 @@ export default function Calendar({
         .select(
           "id, days_of_week, color, user_id, day_time_ranges, week_pattern",
         )
-        .eq("child_id", childId);
+        .eq("child_id", resolvedChildId);
 
       if (error && isMissingWeekPatternColumnError(error)) {
         const fallback = await supabase
           .from("custody_schedules")
           .select("id, days_of_week, color, user_id, day_time_ranges")
-          .eq("child_id", childId);
+          .eq("child_id", resolvedChildId);
         data = fallback.data as typeof data;
         error = fallback.error;
       }
@@ -363,7 +369,7 @@ export default function Calendar({
         .select(
           "id, activity_name, days_of_week, start_time, end_time, color, child_id",
         )
-        .eq("child_id", childId)
+        .eq("child_id", resolvedChildId)
         .eq("is_active", true);
 
       if (error) {
@@ -395,7 +401,7 @@ export default function Calendar({
         start_time: activity.start_time,
         end_time: activity.end_time,
         activity_name: activity.activity_name,
-        child_id: childId,
+        child_id: resolvedChildId,
         isRecurring: true,
         color: activity.color,
       }));
@@ -702,7 +708,7 @@ export default function Calendar({
         } else {
           const { error } = await supabase.from("custody_schedules").insert({
             user_id: parent.id,
-            child_id: childId,
+            child_id: resolvedChildId,
             color: parent.color,
             days_of_week: normalizedDays,
             day_time_ranges: dayTimeRangesPayload,
@@ -883,7 +889,7 @@ export default function Calendar({
         const insertResult = await supabase
           .from("recurring_activities")
           .insert({
-            child_id: childId,
+            child_id: resolvedChildId,
             user_id: userData.user.id,
             activity_name: newEventName,
             days_of_week: [repeatingDayIndex],
@@ -912,7 +918,7 @@ export default function Calendar({
         const insertResult = await supabase
           .from("calendar_events")
           .insert({
-            child_id: childId,
+            child_id: resolvedChildId,
             user_id: userData.user.id,
             start_time: startTimeISO,
             end_time: endTimeISO,
@@ -930,7 +936,7 @@ export default function Calendar({
             eventId: insertResult.data.id,
             title: insertResult.data.activity_name || newEventName,
             startTimeISO: insertResult.data.start_time || startTimeISO,
-            childName,
+            childName: resolvedChildName,
             minutesBefore: newEventAlertMinutes,
           });
         }
@@ -1210,7 +1216,7 @@ export default function Calendar({
                   eventId: selectedEvent.id,
                   title: selectedEvent.activity_name,
                   startTimeISO: selectedEvent.start_time,
-                  childName,
+                  childName: resolvedChildName,
                 });
 
                 setEditEventModalVisible(false);
@@ -1284,7 +1290,7 @@ export default function Calendar({
           { borderBottomColor: Colors[colorScheme ?? "light"].border },
         ]}
       >
-        <TouchableOpacity onPress={onCancel} style={styles.backButton}>
+        <TouchableOpacity onPress={handleCancel} style={styles.backButton}>
           <Text
             style={[
               styles.backButtonText,

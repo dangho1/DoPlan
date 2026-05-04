@@ -3,9 +3,9 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAddChild, useChildren } from "@/hooks/queries/useChildren";
 import type { Child } from "@/lib/types";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
     Image,
     Modal,
     StyleSheet,
@@ -14,27 +14,13 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { useQueryClient } from "@tanstack/react-query";
-import ChildMenu from "../../components/ChildMenu";
 import IOSAlert from "../../components/IOSAlert";
 import { useIOSAlert } from "../../hooks/useIOSAlert";
-import Activities from "../child/activities";
-import Calendar from "../child/calendar";
-import ChildSettings from "../child/child-settings";
-import Economics from "../child/economics";
-
-type CurrentView =
-  | "home"
-  | "childMenu"
-  | "calendar"
-  | "economics"
-  | "settings"
-  | "activities";
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const { showAlert, alertProps } = useIOSAlert();
-  const queryClient = useQueryClient();
+  const router = useRouter();
 
   const { data: currentUser } = useCurrentUser();
   const userId = currentUser?.id;
@@ -45,8 +31,6 @@ export default function HomeScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [newChildName, setNewChildName] = useState("");
   const [newChildBirthdate, setNewChildBirthdate] = useState("");
-  const [currentView, setCurrentView] = useState<CurrentView>("home");
-  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
 
   const handleAddNewChild = async () => {
     if (!newChildName.trim()) {
@@ -79,87 +63,15 @@ export default function HomeScreen() {
   };
 
   const handleChildPress = (child: Child) => {
-    setSelectedChild(child);
-    setCurrentView("childMenu");
-  };
-
-  const handleBackToHome = () => {
-    setCurrentView("home");
-    setSelectedChild(null);
-  };
-
-  const handleCalendarConfirm = async (_selectedDates: Date[]) => {
-    if (!selectedChild) return;
-    showAlert({
-      message: `Calendar events saved for ${selectedChild.name}!`,
-      type: "success",
+    router.push({
+      pathname: "/child/menu",
+      params: {
+        childId: child.id,
+        childName: child.name,
+        childDob: child.date_of_birth ?? "",
+        childAvatarUrl: child.avatar_url ?? "",
+      },
     });
-    setCurrentView("childMenu");
-  };
-
-  const handleChildUpdated = () => {
-    queryClient.invalidateQueries({ queryKey: ["children", userId] }).then(() => {
-      if (selectedChild) {
-        const refreshed = queryClient.getQueryData<Child[]>(["children", userId]);
-        const updated = refreshed?.find((c) => c.id === selectedChild.id);
-        if (updated) setSelectedChild(updated);
-      }
-    });
-  };
-
-  if (currentView === "childMenu" && selectedChild) {
-    return (
-      <ChildMenu
-        child={selectedChild}
-        onBack={handleBackToHome}
-        onCalendar={() => setCurrentView("calendar")}
-        onEconomics={() => setCurrentView("economics")}
-        onSettings={() => setCurrentView("settings")}
-        onActivities={() => setCurrentView("activities")}
-      />
-    );
-  }
-
-  if (currentView === "calendar" && selectedChild) {
-    return (
-      <Calendar
-        childName={selectedChild.name}
-        childId={selectedChild.id}
-        onConfirm={handleCalendarConfirm}
-        onCancel={() => setCurrentView("childMenu")}
-      />
-    );
-  }
-
-  if (currentView === "economics" && selectedChild) {
-    return (
-      <Economics
-        childName={selectedChild.name}
-        childId={selectedChild.id}
-        onBack={() => setCurrentView("childMenu")}
-      />
-    );
-  }
-
-  if (currentView === "settings" && selectedChild) {
-    return (
-      <ChildSettings
-        childName={selectedChild.name}
-        childId={selectedChild.id}
-        onBack={() => setCurrentView("childMenu")}
-        onChildUpdated={handleChildUpdated}
-      />
-    );
-  }
-
-  if (currentView === "activities" && selectedChild) {
-    return (
-      <Activities
-        childName={selectedChild.name}
-        childId={selectedChild.id}
-        onBack={() => setCurrentView("childMenu")}
-      />
-    );
   }
 
   return (

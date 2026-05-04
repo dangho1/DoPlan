@@ -7,6 +7,9 @@ export default function ChildLayout() {
       screenOptions={{
         headerShown: false,
       }}>
+      <Stack.Screen name="menu" />
+      <Stack.Screen name="activities" />
+      <Stack.Screen name="child-settings" />
       <Stack.Screen name="calendar" />
       <Stack.Screen name="economics" />
       <Stack.Screen name="settings" />
