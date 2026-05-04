@@ -1,14 +1,8 @@
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import type { Child } from "@/lib/types";
 import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-
-interface Child {
-  id: string;
-  name: string;
-  date_of_birth: string;
-  avatar_url?: string | null;
-}
 
 interface MenuOption {
   id: string;
@@ -53,7 +47,7 @@ export default function ChildMenu({
     },
   ];
 
-  const calculateAge = (birthDate: string): string => {
+  const calculateAge = (birthDate: string | null): string => {
     if (!birthDate) return "";
 
     const birth = new Date(birthDate);
