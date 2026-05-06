@@ -4,6 +4,6 @@
 /* eslint-disable no-undef */
 module.exports = {
   version: "1.0.0",
-  iosBuildNumber: "3",
+  iosBuildNumber: "4",
   androidVersionCode: 2,
 };
