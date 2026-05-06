@@ -3,72 +3,20 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Dimensions,
-  Keyboard,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Auth from "../components/Auth";
-import { Colors } from "../constants/Colors";
-import { useColorScheme } from "../hooks/useColorScheme";
-import { isBrowser } from "../lib/platformUtils";
 import { clearSupabaseStorage } from "../lib/storageAdapter";
 import { supabase } from "../lib/supabase";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 
 const queryClient = new QueryClient();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
-  const [keyboardBottomOffset, setKeyboardBottomOffset] = useState(0);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [focusedInputHasAccessory, setFocusedInputHasAccessory] =
-    useState(false);
-
-  const theme = Colors[colorScheme ?? "light"];
-
-  const getKeyboardBottomOffset = (
-    keyboardHeight?: number,
-    keyboardScreenY?: number,
-  ) => {
-    const windowHeight = Dimensions.get("window").height;
-    const fromHeight = Math.max(0, keyboardHeight ?? 0);
-    const fromScreenY =
-      keyboardScreenY != null ? Math.max(0, windowHeight - keyboardScreenY) : 0;
-
-    // Use the larger signal so the bar remains attached across keyboard frame changes.
-    return Math.max(fromHeight, fromScreenY);
-  };
-
-  const updateFocusedInputAccessoryState = () => {
-    const textInputState = (
-      TextInput as unknown as {
-        State?: {
-          currentlyFocusedInput?: () => {
-            props?: {
-              inputAccessoryViewID?: string;
-            };
-          } | null;
-        };
-      }
-    ).State;
-
-    const focusedInput = textInputState?.currentlyFocusedInput?.();
-
-    setFocusedInputHasAccessory(
-      Boolean(focusedInput?.props?.inputAccessoryViewID),
-    );
-  };
 
   const isRecoveryUrl = (url: string) => {
     const normalized = url.toLowerCase();
@@ -143,94 +91,6 @@ export default function RootLayout() {
     }
   }, []);
 
-  useEffect(() => {
-    if (Platform.OS !== "ios") {
-      return;
-    }
-
-    const showSub = Keyboard.addListener("keyboardWillShow", (event) => {
-      setKeyboardBottomOffset(
-        getKeyboardBottomOffset(
-          event.endCoordinates.height,
-          event.endCoordinates.screenY,
-        ),
-      );
-      setKeyboardVisible(true);
-      requestAnimationFrame(updateFocusedInputAccessoryState);
-    });
-
-    const frameSub = Keyboard.addListener(
-      "keyboardWillChangeFrame",
-      (event) => {
-        setKeyboardBottomOffset(
-          getKeyboardBottomOffset(
-            event.endCoordinates.height,
-            event.endCoordinates.screenY,
-          ),
-        );
-        requestAnimationFrame(updateFocusedInputAccessoryState);
-      },
-    );
-
-    const didFrameSub = Keyboard.addListener(
-      "keyboardDidChangeFrame",
-      (event) => {
-        setKeyboardBottomOffset(
-          getKeyboardBottomOffset(
-            event.endCoordinates.height,
-            event.endCoordinates.screenY,
-          ),
-        );
-        requestAnimationFrame(updateFocusedInputAccessoryState);
-      },
-    );
-
-    const hideSub = Keyboard.addListener("keyboardWillHide", () => {
-      setKeyboardVisible(false);
-      setKeyboardBottomOffset(0);
-      setFocusedInputHasAccessory(false);
-    });
-
-    return () => {
-      showSub.remove();
-      frameSub.remove();
-      didFrameSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  const renderKeyboardDismissBar = () => {
-    if (Platform.OS !== "ios" || !keyboardVisible || focusedInputHasAccessory) {
-      return null;
-    }
-
-    return (
-      <View
-        pointerEvents="box-none"
-        style={[
-          styles.keyboardAccessoryBar,
-          {
-            bottom: keyboardBottomOffset,
-            backgroundColor: theme.cardBackground,
-            borderTopColor: theme.border,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          onPress={Keyboard.dismiss}
-          style={styles.keyboardAccessoryButton}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[styles.keyboardAccessoryButtonText, { color: theme.tint }]}
-          >
-            Done
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
   if (loading) {
     return (
       <QueryClientProvider client={queryClient}>
@@ -246,7 +106,6 @@ export default function RootLayout() {
               >
                 <ActivityIndicator size="large" />
               </View>
-              {renderKeyboardDismissBar()}
             </View>
           </SafeAreaProvider>
         </GestureHandlerRootView>
@@ -256,50 +115,54 @@ export default function RootLayout() {
 
   if (!session || isPasswordRecovery) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <GestureHandlerRootView style={styles.gestureRoot}>
-          <SafeAreaProvider>
-            <View style={styles.keyboardContainer}>
-              <Auth
-                forceShow={isPasswordRecovery}
-                onPasswordRecoveryComplete={() => setIsPasswordRecovery(false)}
-              />
-              {renderKeyboardDismissBar()}
-            </View>
-          </SafeAreaProvider>
-        </GestureHandlerRootView>
-      </QueryClientProvider>
+      <KeyboardProvider>
+        <QueryClientProvider client={queryClient}>
+          <GestureHandlerRootView style={styles.gestureRoot}>
+            <SafeAreaProvider>
+              <View style={styles.keyboardContainer}>
+                <Auth
+                  forceShow={isPasswordRecovery}
+                  onPasswordRecoveryComplete={() =>
+                    setIsPasswordRecovery(false)
+                  }
+                />
+              </View>
+            </SafeAreaProvider>
+          </GestureHandlerRootView>
+        </QueryClientProvider>
+      </KeyboardProvider>
     );
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={styles.gestureRoot}>
-        <SafeAreaProvider>
-          <View style={styles.keyboardContainer}>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-              }}
-            >
-              <Stack.Screen
-                name="(tabs)"
-                options={{
+    <KeyboardProvider>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={styles.gestureRoot}>
+          <SafeAreaProvider>
+            <View style={styles.keyboardContainer}>
+              <Stack
+                screenOptions={{
                   headerShown: false,
                 }}
-              />
-              <Stack.Screen
-                name="settings"
-                options={{
-                  headerShown: false,
-                }}
-              />
-            </Stack>
-            {renderKeyboardDismissBar()}
-          </View>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+              >
+                <Stack.Screen
+                  name="(tabs)"
+                  options={{
+                    headerShown: false,
+                  }}
+                />
+                <Stack.Screen
+                  name="settings"
+                  options={{
+                    headerShown: false,
+                  }}
+                />
+              </Stack>
+            </View>
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    </KeyboardProvider>
   );
 }
 
