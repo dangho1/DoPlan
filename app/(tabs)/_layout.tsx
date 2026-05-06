@@ -12,7 +12,6 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: false,
-        tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen
@@ -28,7 +27,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="chat"
+        name="friends"
         options={{
           title: "Friends",
           tabBarIcon: ({ color, focused }) => (
