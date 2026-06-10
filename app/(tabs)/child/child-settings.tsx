@@ -2,6 +2,8 @@ import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useDeleteChild } from "@/hooks/queries/useChildren";
+import type { Child } from "@/lib/types";
+import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -22,7 +24,7 @@ import {
     UIManager,
     View,
 } from "react-native";
-import { supabase } from "../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 interface Parent {
   user_id: string;
@@ -55,6 +57,7 @@ export default function ChildSettings({
   const colorScheme = useColorScheme();
   const { data: currentUser } = useCurrentUser();
   const deleteChild = useDeleteChild(currentUser?.id);
+  const queryClient = useQueryClient();
   const scrollViewRef = useRef<ScrollView | null>(null);
   const refNameInput = useRef<TextInput | null>(null);
   const refBirthDateInput = useRef<TextInput | null>(null);
@@ -75,6 +78,13 @@ export default function ChildSettings({
   const [childAvatarUrl, setChildAvatarUrl] = useState<string | null>(null);
   const [savingChild, setSavingChild] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const updateChildCache = (updates: Partial<Child>) => {
+    queryClient.setQueryData<Child>(["child", resolvedChildId], (current) =>
+      current ? { ...current, ...updates } : current,
+    );
+    queryClient.invalidateQueries({ queryKey: ["children", currentUser?.id] });
+  };
 
   const getAvatarFileExtension = (asset: ImagePicker.ImagePickerAsset) => {
     const extensionFromName = asset.fileName?.split(".").pop()?.toLowerCase();
@@ -294,6 +304,7 @@ export default function ChildSettings({
       }
 
       setChildAvatarUrl(publicUrlData.publicUrl);
+      updateChildCache({ avatar_url: publicUrlData.publicUrl });
       Alert.alert("Success", "Child avatar updated successfully.");
       if (onChildUpdated) {
         onChildUpdated();
@@ -374,6 +385,10 @@ export default function ChildSettings({
         Alert.alert("Error", "Failed to update child information.");
       } else {
         setChildBirthDate(editedBirthDate);
+        updateChildCache({
+          name: editedName.trim(),
+          date_of_birth: editedBirthDate || null,
+        });
         setEditingChild(false);
         Alert.alert("Success", "Child information updated successfully!");
         // Callback to parent to refresh child info
@@ -607,7 +622,7 @@ export default function ChildSettings({
                   source={
                     childAvatarUrl
                       ? { uri: childAvatarUrl }
-                      : require("../../assets/images/child_placeholder.png")
+                      : require("../../../assets/images/child_placeholder.png")
                   }
                   style={styles.childAvatarImage}
                 />

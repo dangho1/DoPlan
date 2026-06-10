@@ -2,54 +2,42 @@ import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
+  useAddConversationParticipant,
+  useConversation,
+  useLeaveConversation,
+} from "@/hooks/queries/useConversations";
+import { useFriends } from "@/hooks/queries/useFriendships";
+import {
   useMarkMessagesRead,
   useMessages,
   useSendMessage,
 } from "@/hooks/queries/useMessages";
-import type { Message } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
+import type { Message } from "@/lib/types";
+import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
+  Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-} from "react-native-reanimated";
-import {
-  useKeyboardHandler,
-  useReanimatedKeyboardAnimation,
-} from "react-native-keyboard-controller";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 
-const useGradualAnimation = () => {
-  const height = useSharedValue(0);
-
-  useKeyboardHandler(
-    {
-      onMove: (event) => {
-        "worklet";
-        console.log("Event", event);
-        height.value = Math.max(event.height, 0);
-      },
-      onEnd: (event) => {
-        "worklet";
-        height.value = event.height; // will be 0 on dismiss
-      },
-    },
-    [],
-  );
-  return { height };
-};
 export default function ChatConversationScreen() {
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? "light"];
   const router = useRouter();
+  const navigation = useNavigation();
   const queryClient = useQueryClient();
   const { conversationId, friendId, friendName, title } = useLocalSearchParams<{
     conversationId?: string;
@@ -60,9 +48,41 @@ export default function ChatConversationScreen() {
 
   const { data: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id;
+  const { data: conversation } = useConversation(
+    conversationId,
+    currentUserId,
+  );
+  const { data: friends = [] } = useFriends(currentUserId);
+  const addParticipant = useAddConversationParticipant(currentUserId);
+  const leaveConversation = useLeaveConversation(currentUserId);
 
-  const displayTitle = title || friendName || "Chat";
-  const effectiveFriendId = friendId || "";
+  const effectiveFriendId =
+    conversation?.participant_ids.find((id) => id !== currentUserId) ??
+    friendId ??
+    "";
+  const displayTitle = conversation?.title || title || friendName || "Chat";
+  const participantCount = conversation?.participant_ids.length ?? 0;
+  const participantLabel =
+    participantCount > 0
+      ? `${participantCount} ${participantCount === 1 ? "member" : "members"}`
+      : "Conversation";
+  const memberNames = useMemo(
+    () =>
+      new Map(
+        conversation?.members.map((member) => [
+          member.user_id,
+          member.display_name,
+        ]) ?? [],
+      ),
+    [conversation?.members],
+  );
+  const availableFriends = useMemo(
+    () =>
+      friends.filter(
+        (friend) => !conversation?.participant_ids.includes(friend.user_id),
+      ),
+    [conversation?.participant_ids, friends],
+  );
 
   const { data: messages = [], isLoading } = useMessages(
     currentUserId,
@@ -74,44 +94,58 @@ export default function ChatConversationScreen() {
     effectiveFriendId,
     conversationId,
   );
-  const markRead = useMarkMessagesRead(
+  const { mutate: markMessagesRead } = useMarkMessagesRead(
     currentUserId,
     effectiveFriendId,
     conversationId,
   );
 
-  const [newMessage, setNewMessage] = React.useState("");
+  const [newMessage, setNewMessage] = useState("");
+  const [manageModalVisible, setManageModalVisible] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const navigation = useNavigation();
-
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
 
-  const listContainerStyle = useAnimatedStyle(() => {
-    return {
-      flex: 1,
-      marginBottom: Math.abs(keyboardHeight.value),
-    };
-  });
-  const containerStyle = useAnimatedStyle(() => ({
+  const listContainerStyle = useAnimatedStyle(() => ({
     flex: 1,
-    transform: [{ translateY: keyboardHeight.value }], // keyboardHeight is negative, so this moves up
+    marginBottom: Math.abs(keyboardHeight.value),
   }));
-  const fakeView = useAnimatedStyle(() => {
-    return {
-      height: Math.abs(keyboardHeight.value),
-    };
-  }, []);
-  useEffect(
-    function SetHeaderTitle() {
-      navigation.setOptions({ headerTitle: `${friendName} - ${title}` });
-    },
-    [friendName, title, navigation],
-  );
 
   useEffect(() => {
-    if (!currentUserId) return;
+    navigation.setOptions({
+      headerBackTitle: "Chats",
+      headerTitle: () => (
+        <View style={styles.headerTitleContainer}>
+          <Text
+            numberOfLines={1}
+            style={styles.headerTitle}
+          >
+            {displayTitle}
+          </Text>
+          <Text style={styles.headerSubtitle}>{participantLabel}</Text>
+        </View>
+      ),
+      headerRight: () => (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Manage chat"
+          onPress={() => setManageModalVisible(true)}
+          style={styles.headerButton}
+        >
+          <Ionicons
+            name="settings-outline"
+            size={24}
+            color="black"
+            style={styles.headerButtonIcon}
+          />
+        </TouchableOpacity>
+      ),
+    });
+  }, [displayTitle, navigation, participantLabel]);
 
-    markRead.mutate();
+  useEffect(() => {
+    if (!currentUserId || !effectiveFriendId) return;
+
+    markMessagesRead();
 
     const queryKey = [
       "messages",
@@ -135,32 +169,10 @@ export default function ChatConversationScreen() {
         (payload) => {
           const newMsg = payload.new as Message;
           queryClient.setQueryData<Message[]>(queryKey, (old = []) => {
-            if (old.some((m) => m.id === newMsg.id)) return old;
+            if (old.some((message) => message.id === newMsg.id)) return old;
             return [...old, newMsg];
           });
-          markRead.mutate();
-          setTimeout(
-            () => flatListRef.current?.scrollToEnd({ animated: true }),
-            100,
-          );
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: conversationId
-            ? `conversation_id=eq.${conversationId}`
-            : `sender_id=eq.${currentUserId},receiver_id=eq.${effectiveFriendId}`,
-        },
-        (payload) => {
-          const newMsg = payload.new as Message;
-          queryClient.setQueryData<Message[]>(queryKey, (old = []) => {
-            if (old.some((m) => m.id === newMsg.id)) return old;
-            return [...old, newMsg];
-          });
+          markMessagesRead();
           setTimeout(
             () => flatListRef.current?.scrollToEnd({ animated: true }),
             100,
@@ -172,7 +184,7 @@ export default function ChatConversationScreen() {
         { event: "DELETE", schema: "public", table: "messages" },
         (payload) => {
           queryClient.setQueryData<Message[]>(queryKey, (old = []) =>
-            old.filter((m) => m.id !== payload.old.id),
+            old.filter((message) => message.id !== payload.old.id),
           );
         },
       )
@@ -181,8 +193,10 @@ export default function ChatConversationScreen() {
         { event: "UPDATE", schema: "public", table: "messages" },
         (payload) => {
           queryClient.setQueryData<Message[]>(queryKey, (old = []) =>
-            old.map((m) =>
-              m.id === payload.new.id ? (payload.new as Message) : m,
+            old.map((message) =>
+              message.id === payload.new.id
+                ? (payload.new as Message)
+                : message,
             ),
           );
         },
@@ -192,7 +206,13 @@ export default function ChatConversationScreen() {
     return () => {
       channel.unsubscribe();
     };
-  }, [currentUserId, effectiveFriendId, conversationId]);
+  }, [
+    conversationId,
+    currentUserId,
+    effectiveFriendId,
+    markMessagesRead,
+    queryClient,
+  ]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -201,23 +221,76 @@ export default function ChatConversationScreen() {
         100,
       );
     }
-  }, [isLoading]);
+  }, [isLoading, messages.length]);
 
   const handleSend = () => {
-    if (!newMessage.trim() || sendMessage.isPending) return;
+    if (!newMessage.trim() || sendMessage.isPending || !effectiveFriendId) {
+      return;
+    }
 
     const content = newMessage.trim();
     setNewMessage("");
-
     sendMessage.mutate(content, {
       onError: () => setNewMessage(content),
     });
+  };
 
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  const handleAddParticipant = (participantId: string, name: string) => {
+    if (!conversationId) return;
+
+    addParticipant.mutate(
+      { conversationId, participantId },
+      {
+        onSuccess: () => Alert.alert("Added", `${name} was added to the chat.`),
+        onError: (error) =>
+          Alert.alert(
+            "Could not add person",
+            error instanceof Error ? error.message : "Please try again.",
+          ),
+      },
+    );
+  };
+
+  const handleLeaveConversation = () => {
+    if (!conversationId) return;
+
+    const isGroup = participantCount > 2;
+    Alert.alert(
+      isGroup ? "Leave chat" : "Delete chat",
+      isGroup
+        ? "You will no longer see this chat or receive new messages from it."
+        : "This is a two-person chat. Deleting it removes the chat and its messages for both people.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: isGroup ? "Leave" : "Delete",
+          style: "destructive",
+          onPress: () =>
+            leaveConversation.mutate(conversationId, {
+              onSuccess: () => {
+                setManageModalVisible(false);
+                router.replace("/(tabs)/friends");
+              },
+              onError: (error) =>
+                Alert.alert(
+                  "Could not update chat",
+                  error instanceof Error ? error.message : "Please try again.",
+                ),
+            }),
+        },
+      ],
+    );
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isMyMessage = item.sender_id === currentUserId;
+    const senderName = isMyMessage
+      ? "You"
+      : memberNames.get(item.sender_id) || friendName || "Unknown sender";
+    const sentAt = new Date(item.created_at ?? "").toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
     return (
       <View
@@ -231,70 +304,48 @@ export default function ChatConversationScreen() {
         <View
           style={[
             styles.messageBubble,
-            isMyMessage
-              ? { backgroundColor: Colors[colorScheme ?? "light"].tint }
-              : {
-                  backgroundColor:
-                    Colors[colorScheme ?? "light"].tabIconDefault + "20",
-                },
+            {
+              backgroundColor: isMyMessage
+                ? colors.tint
+                : colors.tabIconDefault + "20",
+            },
           ]}
         >
           <Text
             style={[
               styles.messageText,
-              {
-                color: isMyMessage
-                  ? "white"
-                  : Colors[colorScheme ?? "light"].text,
-              },
+              { color: isMyMessage ? "white" : colors.text },
             ]}
           >
             {item.content}
           </Text>
-          <Text
-            style={[
-              styles.messageTime,
-              {
-                color: isMyMessage
-                  ? "rgba(255,255,255,0.7)"
-                  : Colors[colorScheme ?? "light"].tabIconDefault,
-              },
-            ]}
-          >
-            {new Date(item.created_at ?? "").toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
         </View>
+        <Text
+          style={[
+            styles.messageMeta,
+            { color: colors.textSecondary },
+            isMyMessage ? styles.myMessageMeta : styles.theirMessageMeta,
+          ]}
+        >
+          {senderName} · {sentAt}
+        </Text>
       </View>
     );
   };
 
   if (isLoading) {
     return (
-      <View
-        style={[
-          styles.container,
-          { backgroundColor: Colors[colorScheme ?? "light"].background },
-        ]}
-      >
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <Text style={{ color: Colors[colorScheme ?? "light"].text }}>
-            Loading messages...
-          </Text>
+          <ActivityIndicator color={colors.tint} />
+          <Text style={{ color: colors.text }}>Loading messages...</Text>
         </View>
       </View>
     );
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: Colors[colorScheme ?? "light"].background },
-      ]}
-    >
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Animated.View style={listContainerStyle}>
         <FlatList
           ref={flatListRef}
@@ -303,17 +354,9 @@ export default function ChatConversationScreen() {
           inverted
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() =>
-            flatListRef.current?.scrollToEnd({ animated: true })
-          }
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Text
-                style={[
-                  styles.emptyStateText,
-                  { color: Colors[colorScheme ?? "light"].tabIconDefault },
-                ]}
-              >
+              <Text style={[styles.emptyStateText, { color: colors.tabIconDefault }]}>
                 No messages yet. Start the conversation!
               </Text>
             </View>
@@ -321,24 +364,21 @@ export default function ChatConversationScreen() {
         />
 
         <View
-          style={[
-            styles.inputContainer,
-            { borderTopColor: Colors[colorScheme ?? "light"].tabIconDefault },
-          ]}
+          style={[styles.inputContainer, { borderTopColor: colors.tabIconDefault }]}
         >
           <TextInput
             style={[
               styles.input,
               {
-                backgroundColor: Colors[colorScheme ?? "light"].background,
-                color: Colors[colorScheme ?? "light"].text,
-                borderColor: Colors[colorScheme ?? "light"].tabIconDefault,
+                backgroundColor: colors.background,
+                color: colors.text,
+                borderColor: colors.tabIconDefault,
               },
             ]}
             value={newMessage}
             onChangeText={setNewMessage}
             placeholder="Type a message..."
-            placeholderTextColor={Colors[colorScheme ?? "light"].tabIconDefault}
+            placeholderTextColor={colors.tabIconDefault}
             multiline
             maxLength={1000}
           />
@@ -346,77 +386,207 @@ export default function ChatConversationScreen() {
             style={[
               styles.sendButton,
               {
-                backgroundColor: Colors[colorScheme ?? "light"].tint,
-                opacity: !newMessage.trim() || sendMessage.isPending ? 0.5 : 1,
+                backgroundColor: colors.tint,
+                opacity:
+                  !newMessage.trim() || sendMessage.isPending || !effectiveFriendId
+                    ? 0.5
+                    : 1,
               },
             ]}
             onPress={handleSend}
-            disabled={!newMessage.trim() || sendMessage.isPending}
+            disabled={
+              !newMessage.trim() || sendMessage.isPending || !effectiveFriendId
+            }
           >
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
+
+      <Modal
+        visible={manageModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setManageModalVisible(false)}
+      >
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          style={{ backgroundColor: colors.background }}
+          contentContainerStyle={styles.manageContent}
+        >
+          <View style={styles.manageHeader}>
+            <Text style={[styles.manageTitle, { color: colors.text }]}>Chat details</Text>
+            <TouchableOpacity onPress={() => setManageModalVisible(false)}>
+              <Text style={[styles.doneText, { color: colors.tint }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Members</Text>
+            {conversation?.members.map((member) => (
+              <View
+                key={member.user_id}
+                style={[styles.row, { borderBottomColor: colors.tabIconDefault }]}
+              >
+                <View style={styles.rowText}>
+                  <Text style={[styles.rowTitle, { color: colors.text }]}>
+                    {member.display_name}
+                    {member.user_id === currentUserId ? " (You)" : ""}
+                  </Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.tabIconDefault }]}>
+                    {member.email}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Add a friend</Text>
+            {availableFriends.length === 0 ? (
+              <Text style={[styles.helpText, { color: colors.tabIconDefault }]}>
+                All of your friends are already in this chat.
+              </Text>
+            ) : (
+              availableFriends.map((friend) => (
+                <View
+                  key={friend.user_id}
+                  style={[styles.row, { borderBottomColor: colors.tabIconDefault }]}
+                >
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowTitle, { color: colors.text }]}>
+                      {friend.display_name}
+                    </Text>
+                    <Text style={[styles.rowSubtitle, { color: colors.tabIconDefault }]}>
+                      {friend.email}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: colors.tint }]}
+                    disabled={addParticipant.isPending}
+                    onPress={() =>
+                      handleAddParticipant(friend.user_id, friend.display_name)
+                    }
+                  >
+                    <Text style={styles.addButtonText}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={styles.destructiveButton}
+            disabled={leaveConversation.isPending}
+            onPress={handleLeaveConversation}
+          >
+            <Text style={styles.destructiveButtonText}>
+              {leaveConversation.isPending
+                ? "Updating..."
+                : participantCount > 2
+                  ? "Leave chat"
+                  : "Delete chat"}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: "row",
+  headerButton: {
+    minWidth: 44,
+    minHeight: 44,
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    paddingTop: 50,
+    justifyContent: "center",
   },
-  backButton: {
-    width: 36,
-    height: 36,
+  headerButtonIcon: { transform: [{ translateY: 1, }], marginBottom: 10 },
+  headerTitleContainer: {
+    maxWidth: 210,
+    alignItems: "center",
+    gap: 1,
+  },
+  headerTitle: { color: "white", fontSize: 17, fontWeight: "700" },
+  headerSubtitle: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  loadingContainer: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    gap: 12,
   },
-  backButtonText: { color: "white", fontSize: 28, fontWeight: "bold" },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "white",
-    flex: 1,
-    textAlign: "center",
-  },
-  headerPlaceholder: { width: 36 },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   messagesList: { padding: 16 },
-  messageContainer: { marginVertical: 4, maxWidth: "75%" },
+  messageContainer: { marginVertical: 5, maxWidth: "78%" },
   myMessageContainer: { alignSelf: "flex-end" },
   theirMessageContainer: { alignSelf: "flex-start" },
-  messageBubble: { padding: 12, borderRadius: 16 },
-  messageText: { fontSize: 16, marginBottom: 4 },
-  messageTime: { fontSize: 11, alignSelf: "flex-end" },
+  messageBubble: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderCurve: "continuous",
+  },
+  messageText: { fontSize: 16, lineHeight: 21 },
+  messageMeta: { fontSize: 11, paddingTop: 4, fontWeight: "500" },
+  myMessageMeta: { alignSelf: "flex-end", paddingRight: 4 },
+  theirMessageMeta: { alignSelf: "flex-start", paddingLeft: 4 },
   emptyState: { padding: 32, alignItems: "center" },
   emptyStateText: { fontSize: 16, textAlign: "center" },
   inputContainer: {
     flexDirection: "row",
     padding: 12,
     borderTopWidth: 1,
-    // alignItems: "flex-end",
+    gap: 8,
   },
   input: {
-    width: "75%",
+    flex: 1,
     borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    marginRight: 8,
     maxHeight: 100,
     fontSize: 16,
   },
   sendButton: {
     paddingHorizontal: 20,
-    // paddingVertical: 10,
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
   },
   sendButtonText: { color: "white", fontWeight: "bold", fontSize: 16 },
+  manageContent: { padding: 20, gap: 28 },
+  manageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  manageTitle: { fontSize: 24, fontWeight: "700" },
+  doneText: { fontSize: 17, fontWeight: "600" },
+  section: { gap: 4 },
+  sectionTitle: { fontSize: 17, fontWeight: "700", paddingBottom: 8 },
+  row: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+  },
+  rowText: { flex: 1, gap: 2 },
+  rowTitle: { fontSize: 16, fontWeight: "600" },
+  rowSubtitle: { fontSize: 14 },
+  helpText: { fontSize: 15, lineHeight: 21 },
+  addButton: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 18 },
+  addButtonText: { color: "white", fontWeight: "700" },
+  destructiveButton: {
+    minHeight: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#dc2626",
+  },
+  destructiveButtonText: { color: "white", fontSize: 16, fontWeight: "700" },
 });

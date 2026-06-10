@@ -12,16 +12,16 @@ interface CustomHeaderProps {
   onBackPress?: () => void
 }
 
-export default function CustomHeader({ 
-  title = '', 
+export default function CustomHeader({
+  title = '',
   showBackButton = false,
-  onBackPress 
+  onBackPress
 }: CustomHeaderProps) {
   const colorScheme = useColorScheme()
   const colors = Colors[colorScheme ?? 'light']
   const insets = useSafeAreaInsets()
   const segments = useSegments()
-  
+
   // Check if we're on the profile page
   const isProfilePage = segments.some(segment => segment === 'profile')
 
@@ -44,10 +44,10 @@ export default function CustomHeader({
   }
 
   return (
-    <View 
+    <View
       style={[
-        styles.header, 
-        { 
+        styles.header,
+        {
           backgroundColor: '#ffffff', // White background like footer buttons
           paddingTop: insets.top + 10,
           borderBottomColor: colors.border
@@ -58,14 +58,14 @@ export default function CustomHeader({
         {/* Left side - Back button or spacer */}
         <View style={styles.leftSection}>
           {showBackButton ? (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.headerButton, { backgroundColor: colors.cardBackground }]}
               onPress={handleBackPress}
             >
-              <Ionicons 
-                name="arrow-back" 
-                size={20} 
-                color={colors.text} 
+              <Ionicons
+                name="arrow-back"
+                size={20}
+                color={colors.text}
               />
             </TouchableOpacity>
           ) : (
@@ -84,14 +84,14 @@ export default function CustomHeader({
 
         {/* Right side - Profile/Settings button */}
         <View style={styles.rightSection}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.profileButton, { backgroundColor: colors.primary }]}
             onPress={handleRightButtonPress}
           >
-            <Ionicons 
-              name={isProfilePage ? "settings" : "person"} 
-              size={20} 
-              color={colors.buttonText} 
+            <Ionicons
+              name={isProfilePage ? "settings" : "person"}
+              size={20}
+              color={colors.buttonText}
             />
           </TouchableOpacity>
         </View>

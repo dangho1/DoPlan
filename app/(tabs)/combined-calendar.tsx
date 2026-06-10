@@ -1,4 +1,4 @@
-import CombinedCalendar from "@/app/child/combined-calendar";
+import CombinedCalendar from "@/app/(tabs)/child/combined-calendar";
 import { useRouter } from "expo-router";
 import React from "react";
 

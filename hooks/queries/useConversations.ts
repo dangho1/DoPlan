@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import type { ConversationWithDetails } from '@/lib/types'
+import type { ConversationDetails, ConversationWithDetails } from '@/lib/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 export function useConversations(userId: string | undefined) {
@@ -103,13 +103,91 @@ export function useCreateConversation(userId: string | undefined) {
       const { data, error } = await supabase.rpc('create_conversation', {
         p_created_by: userId!,
         p_participant_ids: participantIds,
-        p_title: title ?? null,
+        p_title: title,
       })
 
       if (error) throw error
       return data as string
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations', userId] })
+    },
+  })
+}
+
+export function useConversation(
+  conversationId: string | undefined,
+  userId: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['conversation', conversationId, userId],
+    queryFn: async () => {
+      const { data: conversation, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('id', conversationId!)
+        .single()
+
+      if (error) throw error
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('user_id, display_name, email, avatar_url')
+        .in('user_id', conversation.participant_ids)
+
+      if (profilesError) throw profilesError
+
+      return {
+        ...conversation,
+        members: profiles ?? [],
+      } as ConversationDetails
+    },
+    enabled: !!conversationId && !!userId,
+    staleTime: 30 * 1000,
+  })
+}
+
+export function useAddConversationParticipant(userId: string | undefined) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      participantId,
+    }: {
+      conversationId: string
+      participantId: string
+    }) => {
+      const { error } = await supabase.rpc('add_conversation_participant', {
+        p_conversation_id: conversationId,
+        p_user_id: participantId,
+      })
+
+      if (error) throw error
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['conversation', variables.conversationId],
+      })
+      queryClient.invalidateQueries({ queryKey: ['conversations', userId] })
+    },
+  })
+}
+
+export function useLeaveConversation(userId: string | undefined) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (conversationId: string) => {
+      const { error } = await supabase.rpc('leave_conversation', {
+        p_conversation_id: conversationId,
+      })
+
+      if (error) throw error
+    },
+    onSuccess: (_data, conversationId) => {
+      queryClient.removeQueries({ queryKey: ['conversation', conversationId] })
+      queryClient.removeQueries({ queryKey: ['messages', conversationId] })
       queryClient.invalidateQueries({ queryKey: ['conversations', userId] })
     },
   })

@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import type { Child } from "@/lib/types";
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -18,6 +19,7 @@ interface ChildMenuProps {
   onEconomics: () => void;
   onSettings: () => void;
   onActivities: () => void;
+  onEdit: () => void;
   // Add more function props as needed for future features
 }
 
@@ -28,6 +30,7 @@ export default function ChildMenu({
   onEconomics,
   onSettings,
   onActivities,
+  onEdit,
 }: ChildMenuProps) {
   const colorScheme = useColorScheme();
 
@@ -86,7 +89,12 @@ export default function ChildMenu({
       </View>
 
       {/* Child profile section */}
-      <View style={styles.profileSection}>
+      <TouchableOpacity
+        style={styles.profileSection}
+        onPress={onEdit}
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${child.name}'s name and picture`}
+      >
         {/* Child's picture with fixed size and cropping */}
         <View style={styles.profileImageContainer}>
           <Image
@@ -98,16 +106,31 @@ export default function ChildMenu({
             style={styles.profileImage}
             resizeMode="cover"
           />
+          <View
+            style={[
+              styles.profileEditBadge,
+              { backgroundColor: Colors[colorScheme ?? "light"].primary },
+            ]}
+          >
+            <Ionicons name="camera" size={16} color="#fff" />
+          </View>
         </View>
 
-        <Text
-          style={[
-            styles.childName,
-            { color: Colors[colorScheme ?? "light"].text },
-          ]}
-        >
-          {child.name}
-        </Text>
+        <View style={styles.childNameRow}>
+          <Text
+            style={[
+              styles.childName,
+              { color: Colors[colorScheme ?? "light"].text },
+            ]}
+          >
+            {child.name}
+          </Text>
+          <Ionicons
+            name="pencil"
+            size={18}
+            color={Colors[colorScheme ?? "light"].tint}
+          />
+        </View>
 
         {child.date_of_birth && (
           <Text
@@ -119,7 +142,7 @@ export default function ChildMenu({
             {calculateAge(child.date_of_birth)}
           </Text>
         )}
-      </View>
+      </TouchableOpacity>
 
       {/* Menu options grid */}
       <View style={styles.menuGrid}>
@@ -239,6 +262,23 @@ const styles = StyleSheet.create({
   profileImage: {
     width: "100%",
     height: "100%",
+  },
+  profileEditBadge: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  childNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   childName: {
     fontSize: 28,

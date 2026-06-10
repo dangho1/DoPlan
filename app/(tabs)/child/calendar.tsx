@@ -30,8 +30,8 @@ import {
   EVENT_ALERT_OPTIONS,
   rescheduleEventAlertFromPreference,
   scheduleEventAlert,
-} from "../../lib/eventNotifications";
-import { supabase } from "../../lib/supabase";
+} from "@/lib/eventNotifications";
+import { supabase } from "@/lib/supabase";
 import { DayTimeline } from "./calendar/DayTimeline";
 import type {
   CalendarEvent,

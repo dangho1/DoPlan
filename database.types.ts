@@ -656,6 +656,14 @@ export type Database = {
         };
         Returns: string;
       };
+      add_conversation_participant: {
+        Args: { p_conversation_id: string; p_user_id: string };
+        Returns: undefined;
+      };
+      leave_conversation: {
+        Args: { p_conversation_id: string };
+        Returns: undefined;
+      };
       get_or_create_conversation: {
         Args: { user1_uuid: string; user2_uuid: string };
         Returns: string;

@@ -62,6 +62,18 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="child"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          href: null,
+        }}
+      />
       {/*<Tabs.Screen
         name="testing"
         options={{

@@ -1,6 +1,6 @@
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     ScrollView,
@@ -9,7 +9,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { supabase } from "../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 type ChildInfo = {
   id: string;
@@ -96,7 +96,7 @@ const getDaysInMonthGrid = (date: Date) => {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const startOffset = getDayOfWeekMondayIndex(firstDay);
 
-  const days: Array<Date | null> = [];
+  const days: (Date | null)[] = [];
   for (let i = 0; i < startOffset; i++) days.push(null);
   for (let day = 1; day <= daysInMonth; day++) {
     days.push(new Date(year, month, day));
@@ -116,6 +116,9 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [children, setChildren] = useState<ChildInfo[]>([]);
+  const [hiddenChildIds, setHiddenChildIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [events, setEvents] = useState<CalendarEventRow[]>([]);
   const [recurringActivities, setRecurringActivities] = useState<
     RecurringActivityRow[]
@@ -132,11 +135,7 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
     return map;
   }, [children]);
 
-  useEffect(() => {
-    loadData();
-  }, [currentMonth]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const {
@@ -184,13 +183,22 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
 
       setChildren(dedupedChildren);
 
+      const childIds = dedupedChildren.map((child) => child.id);
+      setHiddenChildIds((previous) => {
+        const availableChildIds = new Set(childIds);
+        return new Set(
+          Array.from(previous).filter((childId) =>
+            availableChildIds.has(childId),
+          ),
+        );
+      });
+
       if (dedupedChildren.length === 0) {
         setEvents([]);
         setRecurringActivities([]);
         return;
       }
 
-      const childIds = dedupedChildren.map((child) => child.id);
       const year = currentMonth.getFullYear();
       const month = currentMonth.getMonth();
       const firstDay = new Date(year, month, 1);
@@ -222,12 +230,21 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
         );
       }
 
-      setEvents(eventsRes.data || []);
+      setEvents(
+        (eventsRes.data || []).filter(
+          (event): event is CalendarEventRow =>
+            event.child_id !== null && event.activity_name !== null,
+        ),
+      );
       setRecurringActivities(recurringRes.data || []);
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentMonth]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const getCombinedEventsForDate = (date: Date): CombinedEvent[] => {
     const dateKey = formatLocalDateKey(date);
@@ -235,7 +252,9 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
 
     const regular = events
       .filter(
-        (event) => formatLocalDateKey(new Date(event.start_time)) === dateKey,
+        (event) =>
+          !hiddenChildIds.has(event.child_id) &&
+          formatLocalDateKey(new Date(event.start_time)) === dateKey,
       )
       .map((event) => {
         const childMeta = childColorMap[event.child_id];
@@ -251,7 +270,11 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
       });
 
     const recurring = recurringActivities
-      .filter((activity) => activity.days_of_week.includes(dayOfWeek))
+      .filter(
+        (activity) =>
+          !hiddenChildIds.has(activity.child_id) &&
+          activity.days_of_week.includes(dayOfWeek),
+      )
       .map((activity) => {
         const childMeta = childColorMap[activity.child_id];
         return {
@@ -280,6 +303,19 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
 
   const days = getDaysInMonthGrid(currentMonth);
   const selectedEvents = getCombinedEventsForDate(selectedDate);
+  const visibleChildrenCount = children.length - hiddenChildIds.size;
+
+  const toggleChildCalendar = (childId: string) => {
+    setHiddenChildIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(childId)) {
+        next.delete(childId);
+      } else {
+        next.add(childId);
+      }
+      return next;
+    });
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -389,23 +425,59 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
         </View>
       </View>
 
+      <View style={styles.calendarFilterHeader}>
+        <Text style={[styles.calendarFilterTitle, { color: theme.text }]}>
+          Calendars ({visibleChildrenCount}/{children.length})
+        </Text>
+        {hiddenChildIds.size > 0 ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Show all children's calendars"
+            onPress={() => setHiddenChildIds(new Set<string>())}
+            style={styles.showAllButton}
+          >
+            <Text style={[styles.showAllText, { color: theme.tint }]}>
+              Show all
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
       <View style={styles.legendRow}>
-        {children.map((child) => (
-          <View key={child.id} style={styles.legendItem}>
-            <View
+        {children.map((child) => {
+          const isVisible = !hiddenChildIds.has(child.id);
+          const childColor =
+            childColorMap[child.id]?.color || theme.primary;
+
+          return (
+            <TouchableOpacity
+              key={child.id}
+              accessibilityRole="checkbox"
+              accessibilityLabel={`${child.name} calendar`}
+              accessibilityState={{ checked: isVisible }}
+              activeOpacity={0.7}
+              onPress={() => toggleChildCalendar(child.id)}
               style={[
-                styles.legendColor,
+                styles.legendItem,
                 {
-                  backgroundColor:
-                    childColorMap[child.id]?.color || theme.primary,
+                  backgroundColor: theme.cardBackground,
+                  borderColor: isVisible ? childColor : theme.border,
+                  opacity: isVisible ? 1 : 0.5,
                 },
               ]}
-            />
-            <Text style={[styles.legendText, { color: theme.text }]}>
-              {child.name}
-            </Text>
-          </View>
-        ))}
+            >
+              <View
+                style={[
+                  styles.legendColor,
+                  { backgroundColor: childColor },
+                ]}
+              />
+              <Text style={[styles.legendText, { color: theme.text }]}>
+                {child.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
@@ -427,7 +499,9 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
         >
           {selectedEvents.length === 0 ? (
             <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-              No events for this day
+              {visibleChildrenCount === 0
+                ? "Select a calendar to see events"
+                : "No events for this day"}
             </Text>
           ) : (
             selectedEvents.map((event) => (
@@ -579,15 +653,38 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
+  calendarFilterHeader: {
+    minHeight: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  calendarFilterTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  showAllButton: {
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+  },
+  showAllText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
   legendRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 12,
   },
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
+    borderWidth: 1.5,
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   legendColor: {
     width: 10,

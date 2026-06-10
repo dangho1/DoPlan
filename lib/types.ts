@@ -26,6 +26,17 @@ export type Conversation = Tables<'conversations'>
 export type ConversationInsert = TablesInsert<'conversations'>
 export type ConversationParticipant = Tables<'conversation_participants'>
 
+export type ConversationMember = {
+  user_id: string
+  display_name: string
+  email: string
+  avatar_url: string | null
+}
+
+export type ConversationDetails = Conversation & {
+  members: ConversationMember[]
+}
+
 // View types
 export type FriendshipWithProfile = Tables<'friendships_with_profiles'>
 export type ConversationListItem = Tables<'conversation_list'>

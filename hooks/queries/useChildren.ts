@@ -23,6 +23,23 @@ export function useChildren(userId: string | undefined) {
   })
 }
 
+export function useChild(childId: string | undefined) {
+  return useQuery({
+    queryKey: ['child', childId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('children')
+        .select('*')
+        .eq('id', childId!)
+        .single()
+
+      if (error) throw error
+      return data as Child
+    },
+    enabled: !!childId,
+  })
+}
+
 export function useAddChild(userId: string | undefined) {
   const queryClient = useQueryClient()
 

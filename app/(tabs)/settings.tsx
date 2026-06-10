@@ -18,8 +18,8 @@ import {
     UIManager,
     View,
 } from "react-native";
-import { deleteCurrentUserAccount } from "../lib/accountService";
-import { supabase } from "../lib/supabase";
+import { deleteCurrentUserAccount } from "@/lib/accountService";
+import { supabase } from "@/lib/supabase";
 
 const DELETE_CONFIRMATION_TEXT = "I AGREE";
 

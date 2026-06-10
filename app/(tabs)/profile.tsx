@@ -246,7 +246,13 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.avatarSection}>
-            <View style={styles.avatarContainer}>
+            <TouchableOpacity
+              style={styles.avatarContainer}
+              onPress={handlePickProfileImage}
+              disabled={uploadingAvatar}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile picture"
+            >
               <Image
                 source={
                   displayProfile.avatar_url
@@ -255,26 +261,38 @@ export default function ProfileScreen() {
                 }
                 style={styles.avatar}
               />
-              {editMode && (
-                <TouchableOpacity
-                  style={[
-                    styles.avatarEditButton,
-                    uploadingAvatar && styles.avatarEditButtonDisabled,
-                  ]}
-                  onPress={handlePickProfileImage}
-                  disabled={uploadingAvatar}
-                >
-                  {uploadingAvatar ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Ionicons name="camera" size={16} color="#fff" />
-                  )}
-                </TouchableOpacity>
-              )}
-            </View>
-            <Text style={[styles.displayName, { color: Colors[colorScheme ?? "light"].text }]}>
-              {profile.display_name || `${profile.first_name} ${profile.last_name}`}
-            </Text>
+              <View
+                style={[
+                  styles.avatarEditButton,
+                  uploadingAvatar && styles.avatarEditButtonDisabled,
+                ]}
+              >
+                {uploadingAvatar ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="camera" size={16} color="#fff" />
+                )}
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.displayNameRow}
+              onPress={handleEditPress}
+              disabled={updateProfile.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Edit profile name"
+            >
+              <Text
+                style={[styles.displayName, { color: Colors[colorScheme ?? "light"].text }]}
+              >
+                {displayProfile.display_name ||
+                  `${displayProfile.first_name} ${displayProfile.last_name}`}
+              </Text>
+              <Ionicons
+                name={editMode ? "checkmark" : "pencil"}
+                size={18}
+                color={Colors[colorScheme ?? "light"].tint}
+              />
+            </TouchableOpacity>
             <Text style={[styles.lastSeen, { color: Colors[colorScheme ?? "light"].text }]}>
               {profile.email}
             </Text>
@@ -463,6 +481,7 @@ const styles = StyleSheet.create({
   },
   avatarEditButtonDisabled: { opacity: 0.7 },
   displayName: { fontSize: 24, fontWeight: "bold", textAlign: "center", marginBottom: 4 },
+  displayNameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   lastSeen: { fontSize: 14, textAlign: "center", opacity: 0.7 },
   infoSection: { marginBottom: 32 },
   sectionTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 16 },

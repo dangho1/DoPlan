@@ -1,7 +1,7 @@
 import React from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { Colors } from '../../constants/Colors'
-import { useColorScheme } from '../../hooks/useColorScheme'
+import { Colors } from '@/constants/Colors'
+import { useColorScheme } from '@/hooks/useColorScheme'
 
 interface SettingsScreenProps {
   onBack?: () => void

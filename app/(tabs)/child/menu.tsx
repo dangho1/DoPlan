@@ -1,4 +1,5 @@
 import ChildMenu from "@/components/ChildMenu";
+import { useChild } from "@/hooks/queries/useChildren";
 import type { Child } from "@/lib/types";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
@@ -20,13 +21,16 @@ export default function ChildMenuScreen() {
       ? params.childAvatarUrl
       : null;
 
-  const child: Child = {
+  const { data: currentChild } = useChild(childId || undefined);
+
+  const fallbackChild: Child = {
     id: childId,
     name: childName || "Unknown Child",
     date_of_birth: childDob,
     avatar_url: childAvatarUrl,
     created_at: "",
   };
+  const child = currentChild ?? fallbackChild;
 
   const childRouteParams = {
     childId,
@@ -44,6 +48,9 @@ export default function ChildMenuScreen() {
         router.push({ pathname: "/child/economics", params: childRouteParams })
       }
       onSettings={() =>
+        router.push({ pathname: "/child/child-settings", params: childRouteParams })
+      }
+      onEdit={() =>
         router.push({ pathname: "/child/child-settings", params: childRouteParams })
       }
       onActivities={() =>
