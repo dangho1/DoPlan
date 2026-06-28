@@ -208,11 +208,11 @@ export default function FriendshipsScreen() {
         { text: "Cancel", style: "cancel" },
         {
           text: "Create",
-          onPress: (title) => {
+          onPress: (title?: string) => {
             createConversation.mutate(
               {
                 participantIds: [userId!, friendId],
-                title: title?.trim() || null,
+                title: title?.trim() || undefined,
               },
               {
                 onSuccess: (conversationId) => {
@@ -222,7 +222,7 @@ export default function FriendshipsScreen() {
                       conversationId,
                       friendId,
                       friendName,
-                      title: title?.trim() || null,
+                      title: title?.trim() || undefined,
                     },
                   });
                 },
@@ -235,7 +235,6 @@ export default function FriendshipsScreen() {
       ],
       "plain-text",
       "",
-      ["text", "title"],
     );
   };
 

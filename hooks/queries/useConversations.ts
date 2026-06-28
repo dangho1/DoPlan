@@ -147,7 +147,68 @@ export function useConversation(
   })
 }
 
+export function useAddConversationParticipants(userId: string | undefined) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      participantIds,
+    }: {
+      conversationId: string
+      participantIds: string[]
+    }) => {
+      const uniqueParticipantIds = Array.from(new Set(participantIds))
+
+      if (uniqueParticipantIds.length === 0) return
+
+      const { error } = await supabase.rpc('add_conversation_participants', {
+        p_conversation_id: conversationId,
+        p_user_ids: uniqueParticipantIds,
+      })
+
+      if (error) throw error
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['conversation', variables.conversationId],
+      })
+      queryClient.invalidateQueries({ queryKey: ['conversations', userId] })
+    },
+  })
+}
+
 export function useAddConversationParticipant(userId: string | undefined) {
+  const addParticipants = useAddConversationParticipants(userId)
+
+  return {
+    ...addParticipants,
+    mutate: (
+      variables: { conversationId: string; participantId: string },
+      options?: Parameters<typeof addParticipants.mutate>[1],
+    ) =>
+      addParticipants.mutate(
+        {
+          conversationId: variables.conversationId,
+          participantIds: [variables.participantId],
+        },
+        options,
+      ),
+    mutateAsync: (
+      variables: { conversationId: string; participantId: string },
+      options?: Parameters<typeof addParticipants.mutateAsync>[1],
+    ) =>
+      addParticipants.mutateAsync(
+        {
+          conversationId: variables.conversationId,
+          participantIds: [variables.participantId],
+        },
+        options,
+      ),
+  }
+}
+
+export function useRemoveConversationParticipant(userId: string | undefined) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -158,7 +219,7 @@ export function useAddConversationParticipant(userId: string | undefined) {
       conversationId: string
       participantId: string
     }) => {
-      const { error } = await supabase.rpc('add_conversation_participant', {
+      const { error } = await supabase.rpc('remove_conversation_participant', {
         p_conversation_id: conversationId,
         p_user_id: participantId,
       })

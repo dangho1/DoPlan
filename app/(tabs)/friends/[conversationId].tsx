@@ -2,9 +2,10 @@ import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
-  useAddConversationParticipant,
+  useAddConversationParticipants,
   useConversation,
   useLeaveConversation,
+  useRemoveConversationParticipant,
 } from "@/hooks/queries/useConversations";
 import { useFriends } from "@/hooks/queries/useFriendships";
 import {
@@ -53,7 +54,8 @@ export default function ChatConversationScreen() {
     currentUserId,
   );
   const { data: friends = [] } = useFriends(currentUserId);
-  const addParticipant = useAddConversationParticipant(currentUserId);
+  const addParticipants = useAddConversationParticipants(currentUserId);
+  const removeParticipant = useRemoveConversationParticipant(currentUserId);
   const leaveConversation = useLeaveConversation(currentUserId);
 
   const effectiveFriendId =
@@ -102,6 +104,7 @@ export default function ChatConversationScreen() {
 
   const [newMessage, setNewMessage] = useState("");
   const [manageModalVisible, setManageModalVisible] = useState(false);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
 
@@ -235,20 +238,59 @@ export default function ChatConversationScreen() {
     });
   };
 
-  const handleAddParticipant = (participantId: string, name: string) => {
-    if (!conversationId) return;
+  const toggleSelectedFriend = (participantId: string) => {
+    setSelectedFriendIds((current) =>
+      current.includes(participantId)
+        ? current.filter((id) => id !== participantId)
+        : [...current, participantId],
+    );
+  };
 
-    addParticipant.mutate(
-      { conversationId, participantId },
+  const handleAddSelectedParticipants = () => {
+    if (!conversationId || selectedFriendIds.length === 0) return;
+
+    addParticipants.mutate(
+      { conversationId, participantIds: selectedFriendIds },
       {
-        onSuccess: () => Alert.alert("Added", `${name} was added to the chat.`),
+        onSuccess: () => {
+          Alert.alert(
+            "Added",
+            `${selectedFriendIds.length} ${
+              selectedFriendIds.length === 1 ? "person was" : "people were"
+            } added to the chat.`,
+          );
+          setSelectedFriendIds([]);
+        },
         onError: (error) =>
           Alert.alert(
-            "Could not add person",
+            "Could not add people",
             error instanceof Error ? error.message : "Please try again.",
           ),
       },
     );
+  };
+
+  const handleRemoveParticipant = (participantId: string, name: string) => {
+    if (!conversationId || participantId === currentUserId) return;
+
+    Alert.alert("Remove from chat", `Remove ${name} from this chat?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () =>
+          removeParticipant.mutate(
+            { conversationId, participantId },
+            {
+              onError: (error) =>
+                Alert.alert(
+                  "Could not remove person",
+                  error instanceof Error ? error.message : "Please try again.",
+                ),
+            },
+          ),
+      },
+    ]);
   };
 
   const handleLeaveConversation = () => {
@@ -437,6 +479,17 @@ export default function ChatConversationScreen() {
                     {member.email}
                   </Text>
                 </View>
+                {member.user_id !== currentUserId && participantCount > 2 && (
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    disabled={removeParticipant.isPending}
+                    onPress={() =>
+                      handleRemoveParticipant(member.user_id, member.display_name)
+                    }
+                  >
+                    <Text style={styles.removeButtonText}>Remove</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>
@@ -462,16 +515,59 @@ export default function ChatConversationScreen() {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: colors.tint }]}
-                    disabled={addParticipant.isPending}
-                    onPress={() =>
-                      handleAddParticipant(friend.user_id, friend.display_name)
-                    }
+                    accessibilityRole="checkbox"
+                    accessibilityState={{
+                      checked: selectedFriendIds.includes(friend.user_id),
+                    }}
+                    style={[
+                      styles.selectButton,
+                      {
+                        borderColor: colors.tint,
+                        backgroundColor: selectedFriendIds.includes(friend.user_id)
+                          ? colors.tint
+                          : "transparent",
+                      },
+                    ]}
+                    disabled={addParticipants.isPending}
+                    onPress={() => toggleSelectedFriend(friend.user_id)}
                   >
-                    <Text style={styles.addButtonText}>Add</Text>
+                    <Text
+                      style={[
+                        styles.selectButtonText,
+                        {
+                          color: selectedFriendIds.includes(friend.user_id)
+                            ? "white"
+                            : colors.tint,
+                        },
+                      ]}
+                    >
+                      {selectedFriendIds.includes(friend.user_id) ? "Selected" : "Select"}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ))
+            )}
+            {availableFriends.length > 0 && (
+              <TouchableOpacity
+                style={[
+                  styles.addSelectedButton,
+                  {
+                    backgroundColor: colors.tint,
+                    opacity:
+                      selectedFriendIds.length === 0 || addParticipants.isPending
+                        ? 0.5
+                        : 1,
+                  },
+                ]}
+                disabled={selectedFriendIds.length === 0 || addParticipants.isPending}
+                onPress={handleAddSelectedParticipants}
+              >
+                <Text style={styles.addSelectedButtonText}>
+                  {addParticipants.isPending
+                    ? "Adding..."
+                    : `Add ${selectedFriendIds.length || "selected"}`}
+                </Text>
+              </TouchableOpacity>
             )}
           </View>
 
@@ -579,8 +675,25 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 16, fontWeight: "600" },
   rowSubtitle: { fontSize: 14 },
   helpText: { fontSize: 15, lineHeight: 21 },
-  addButton: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 18 },
-  addButtonText: { color: "white", fontWeight: "700" },
+  selectButton: {
+    minWidth: 86,
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  selectButtonText: { fontWeight: "700" },
+  addSelectedButton: {
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    marginTop: 10,
+  },
+  addSelectedButtonText: { color: "white", fontSize: 16, fontWeight: "700" },
+  removeButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14 },
+  removeButtonText: { color: "#dc2626", fontWeight: "700" },
   destructiveButton: {
     minHeight: 50,
     alignItems: "center",
