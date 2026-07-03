@@ -660,6 +660,14 @@ export type Database = {
         Args: { p_conversation_id: string; p_user_id: string };
         Returns: undefined;
       };
+      add_conversation_participants: {
+        Args: { p_conversation_id: string; p_user_ids: string[] };
+        Returns: undefined;
+      };
+      remove_conversation_participant: {
+        Args: { p_conversation_id: string; p_user_id: string };
+        Returns: undefined;
+      };
       leave_conversation: {
         Args: { p_conversation_id: string };
         Returns: undefined;
