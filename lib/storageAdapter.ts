@@ -1,7 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { isBrowser } from "./platformUtils";
+import { Platform } from "react-native";
 
-const SUPABASE_AUTH_KEY = "supabase.auth.token";
+// supabase-js v2 persists the session under "sb-<project-ref>-auth-token"
+const SUPABASE_KEY_PREFIX = "sb-";
+
+/**
+ * Storage is always available in the native runtime. On web it maps to
+ * localStorage, which doesn't exist during SSR/static rendering (Node),
+ * so only there we need the window guard.
+ */
+const isStorageAvailable = () =>
+  Platform.OS !== "web" || typeof window !== "undefined";
 
 /**
  * Clear all Supabase auth data from storage
@@ -9,10 +18,10 @@ const SUPABASE_AUTH_KEY = "supabase.auth.token";
  */
 export const clearSupabaseStorage = async (): Promise<void> => {
   try {
-    if (isBrowser()) {
+    if (isStorageAvailable()) {
       const keys = await AsyncStorage.getAllKeys();
       const supabaseKeys = keys.filter((key) =>
-        key.startsWith("supabase.auth"),
+        key.startsWith(SUPABASE_KEY_PREFIX),
       );
       if (supabaseKeys.length > 0) {
         await AsyncStorage.multiRemove(supabaseKeys);
@@ -32,11 +41,10 @@ export const createStorageAdapter = () => {
   return {
     getItem: async (key: string): Promise<string | null> => {
       try {
-        // Only attempt to use AsyncStorage in a browser/native environment
-        if (isBrowser()) {
+        if (isStorageAvailable()) {
           const value = await AsyncStorage.getItem(key);
           // Validate that the stored data is valid JSON for auth tokens
-          if (value && key.includes("supabase.auth")) {
+          if (value && key.startsWith(SUPABASE_KEY_PREFIX)) {
             try {
               JSON.parse(value);
             } catch (e) {
@@ -55,7 +63,7 @@ export const createStorageAdapter = () => {
     },
     setItem: async (key: string, value: string): Promise<void> => {
       try {
-        if (isBrowser()) {
+        if (isStorageAvailable()) {
           await AsyncStorage.setItem(key, value);
         }
       } catch (error) {
@@ -64,7 +72,7 @@ export const createStorageAdapter = () => {
     },
     removeItem: async (key: string): Promise<void> => {
       try {
-        if (isBrowser()) {
+        if (isStorageAvailable()) {
           await AsyncStorage.removeItem(key);
         }
       } catch (error) {

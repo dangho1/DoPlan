@@ -35,11 +35,11 @@ export default function AuthCallback() {
             !!accessToken,
           );
 
-          if (accessToken && type === "recovery") {
+          if (accessToken && refreshToken && type === "recovery") {
             // Set the session with the tokens from the URL
             const { error } = await supabase.auth.setSession({
               access_token: accessToken,
-              refresh_token: refreshToken || "",
+              refresh_token: refreshToken,
             });
 
             if (error) {

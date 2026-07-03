@@ -60,19 +60,19 @@ export default function Auth({
       console.log("Deep link received:", url);
       const { accessToken, refreshToken, type } = parseAuthLink(url);
 
-      if (!accessToken) {
+      // Both tokens are required: setSession with an empty refresh token
+      // creates a session that cannot refresh and dies within the hour.
+      if (!accessToken || !refreshToken) {
         return;
       }
 
       console.log("Auth link detected");
       console.log("Type:", type);
-      console.log("Has access token:", !!accessToken);
-      console.log("Has refresh token:", !!refreshToken);
 
       try {
         const { data, error } = await supabase.auth.setSession({
           access_token: accessToken,
-          refresh_token: refreshToken || "",
+          refresh_token: refreshToken,
         });
 
         if (error) {

@@ -7,7 +7,6 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Auth from "../components/Auth";
-import { clearSupabaseStorage } from "../lib/storageAdapter";
 import { supabase } from "../lib/supabase";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
@@ -44,41 +43,30 @@ export default function RootLayout() {
         setSession(session);
         setLoading(false);
       })
-      .catch(async (error: unknown) => {
+      .catch((error: unknown) => {
+        // Do NOT sign out here: a transient failure (e.g. network blip during
+        // token refresh) must not revoke the persisted session. If the refresh
+        // token is truly invalid, supabase-js emits SIGNED_OUT on its own.
         console.error("Error getting session:", error);
-        // Clear invalid session data if refresh token is invalid
-        if (error instanceof Error && error.message.includes("Refresh Token")) {
-          console.log("Clearing invalid session data");
-          await clearSupabaseStorage();
-          await supabase.auth.signOut();
-        }
         setSession(null);
         setLoading(false);
       });
 
     try {
       const { data: subscription } = supabase.auth.onAuthStateChange(
-        async (event: string, session: Session | null) => {
-          console.log("Main layout - Auth state change:", event, session);
+        (event: string, session: Session | null) => {
+          console.log("Main layout - Auth state change:", event);
 
-          // Handle token refresh errors
-          if (event === "TOKEN_REFRESHED" && !session) {
-            console.log("Token refresh failed, clearing session");
-            await clearSupabaseStorage();
-            await supabase.auth.signOut();
-            setSession(null);
+          if (event === "SIGNED_OUT") {
+            // Field diagnostic: this is the only path that drops the user to
+            // the login screen mid-session.
+            console.warn(
+              `[auth] SIGNED_OUT at ${new Date().toISOString()} — session removed by supabase-js`,
+            );
             setIsPasswordRecovery(false);
-            return;
           }
 
           setSession(session);
-
-          // Clear password recovery flag on successful password update
-          if (event === "TOKEN_REFRESHED" || event === "SIGNED_IN") {
-            // Don't clear immediately, let Auth component handle it
-          } else if (event === "SIGNED_OUT") {
-            setIsPasswordRecovery(false);
-          }
         },
       );
 
