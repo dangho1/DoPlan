@@ -14,7 +14,11 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  InputAccessoryView,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +26,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller"
 
 interface ActivitiesProps {
   childName?: string;
@@ -72,6 +77,8 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [selectedColor, setSelectedColor] = useState(ACTIVITY_COLORS[0]);
+
+  const notesAccessoryId = 'activitiesNotesAccessory';
 
   const resetForm = () => {
     setActivityName('');
@@ -415,14 +422,16 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
         transparent={true}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={styles.modalOverlay}
+        >
           <View
             style={[
               styles.modalContent,
               { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground },
             ]}
           >
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
               <Text
                 style={[styles.modalTitle, { color: Colors[colorScheme ?? 'light'].text }]}
               >
@@ -581,6 +590,9 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                 onChangeText={setNotes}
                 multiline
                 numberOfLines={3}
+                inputAccessoryViewID={
+                  Platform.OS === 'ios' ? notesAccessoryId : undefined
+                }
               />
 
               <Text style={[styles.inputLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
@@ -638,7 +650,34 @@ export default function Activities({ childName, childId, onBack }: ActivitiesPro
                   )}
                 </TouchableOpacity>
               </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
+            {Platform.OS === 'ios' && (
+              <InputAccessoryView nativeID={notesAccessoryId}>
+                <View
+                  style={[
+                    styles.keyboardAccessory,
+                    {
+                      backgroundColor: Colors[colorScheme ?? 'light'].cardBackground,
+                      borderTopColor: Colors[colorScheme ?? 'light'].border,
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.keyboardAccessoryDoneButton}
+                    onPress={() => Keyboard.dismiss()}
+                  >
+                    <Text
+                      style={[
+                        styles.keyboardAccessoryDoneText,
+                        { color: Colors[colorScheme ?? 'light'].primary },
+                      ]}
+                    >
+                      Done
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </InputAccessoryView>
+            )}
           </View>
         </View>
       </Modal>
@@ -723,6 +762,14 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 12 },
   input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16 },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
+  keyboardAccessory: {
+    borderTopWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'flex-end',
+  },
+  keyboardAccessoryDoneButton: { paddingHorizontal: 8, paddingVertical: 4 },
+  keyboardAccessoryDoneText: { fontSize: 17, fontWeight: '600' },
   daysContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   dayButton: {
     paddingVertical: 10,
