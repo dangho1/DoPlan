@@ -95,8 +95,16 @@ export default function FriendshipsScreen() {
   useEffect(() => {
     if (!userId) return;
 
+    // Unique per-mount suffix: `removeChannel` unsubscribes asynchronously, so a
+    // fast unmount/remount (e.g. navigating away right after a mutation) can call
+    // `.channel()` again before the previous instance's teardown lands. Supabase
+    // resolves same-named channels to the same object, so reusing a static name
+    // here would resurrect a channel that's still mid-`subscribe()` and throw on
+    // `.on()`. A unique topic per effect run sidesteps that race entirely.
+    const instanceId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
     const friendshipSub = supabase
-      .channel("friendships_changes")
+      .channel(`friendships_changes_${instanceId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "friendships" },
@@ -111,7 +119,7 @@ export default function FriendshipsScreen() {
       .subscribe();
 
     const conversationSub = supabase
-      .channel("conversations_changes")
+      .channel(`conversations_changes_${instanceId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversations" },
@@ -124,7 +132,7 @@ export default function FriendshipsScreen() {
       .subscribe();
 
     const messageSub = supabase
-      .channel("messages_changes")
+      .channel(`messages_changes_${instanceId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "messages" },
@@ -138,9 +146,9 @@ export default function FriendshipsScreen() {
       .subscribe();
 
     return () => {
-      friendshipSub.unsubscribe();
-      conversationSub.unsubscribe();
-      messageSub.unsubscribe();
+      supabase.removeChannel(friendshipSub);
+      supabase.removeChannel(conversationSub);
+      supabase.removeChannel(messageSub);
     };
   }, [userId, queryClient]);
 

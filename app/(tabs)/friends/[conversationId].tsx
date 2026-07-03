@@ -157,8 +157,15 @@ export default function ChatConversationScreen() {
       effectiveFriendId,
     ];
 
+    // Unique per-mount suffix: `removeChannel` unsubscribes asynchronously, so a
+    // fast unmount/remount (e.g. leaving/deleting the chat right after this
+    // screen mounted) can call `.channel()` again before the previous instance's
+    // teardown lands, resurrecting a channel that's still mid-`subscribe()` and
+    // throwing on `.on()`. A unique topic per effect run avoids that race.
+    const instanceId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
     const channel = supabase
-      .channel(`messages_${conversationId ?? effectiveFriendId}`)
+      .channel(`messages_${conversationId ?? effectiveFriendId}_${instanceId}`)
       .on(
         "postgres_changes",
         {
@@ -207,7 +214,7 @@ export default function ChatConversationScreen() {
       .subscribe();
 
     return () => {
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [
     conversationId,
