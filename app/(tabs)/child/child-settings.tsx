@@ -49,7 +49,7 @@ export default function ChildSettings({
 }: ChildSettingsProps) {
   const router = useRouter();
   const params = useLocalSearchParams<{ childName?: string; childId?: string }>();
-  const resolvedChildName =
+  const initialChildName =
     childName ?? (typeof params.childName === "string" ? params.childName : "");
   const resolvedChildId =
     childId ?? (typeof params.childId === "string" ? params.childId : "");
@@ -72,7 +72,8 @@ export default function ChildSettings({
 
   // Child info editing states
   const [editingChild, setEditingChild] = useState(false);
-  const [editedName, setEditedName] = useState(resolvedChildName);
+  const [currentChildName, setCurrentChildName] = useState(initialChildName);
+  const [editedName, setEditedName] = useState(initialChildName);
   const [editedBirthDate, setEditedBirthDate] = useState("");
   const [childBirthDate, setChildBirthDate] = useState("");
   const [childAvatarUrl, setChildAvatarUrl] = useState<string | null>(null);
@@ -222,6 +223,7 @@ export default function ChildSettings({
       if (error) {
         console.error("Error fetching child info:", error);
       } else if (data) {
+        setCurrentChildName(data.name);
         setEditedName(data.name);
         setChildBirthDate(data.date_of_birth || "");
         setEditedBirthDate(data.date_of_birth || "");
@@ -350,7 +352,7 @@ export default function ChildSettings({
   };
 
   const handleCancelEdit = () => {
-    setEditedName(resolvedChildName);
+    setEditedName(currentChildName);
     setEditedBirthDate(childBirthDate);
     setEditingChild(false);
   };
@@ -370,12 +372,14 @@ export default function ChildSettings({
       return;
     }
 
+    const nextName = editedName.trim();
+
     setSavingChild(true);
     try {
       const { error } = await supabase
         .from("children")
         .update({
-          name: editedName.trim(),
+          name: nextName,
           date_of_birth: editedBirthDate || null,
         })
         .eq("id", resolvedChildId);
@@ -384,9 +388,11 @@ export default function ChildSettings({
         console.error("Error updating child:", error);
         Alert.alert("Error", "Failed to update child information.");
       } else {
+        setCurrentChildName(nextName);
+        setEditedName(nextName);
         setChildBirthDate(editedBirthDate);
         updateChildCache({
-          name: editedName.trim(),
+          name: nextName,
           date_of_birth: editedBirthDate || null,
         });
         setEditingChild(false);
@@ -452,7 +458,7 @@ export default function ChildSettings({
       } else {
         Alert.alert(
           "Success",
-          `${userData.display_name || userData.email} has been granted access to ${resolvedChildName}.`,
+          `${userData.display_name || userData.email} has been granted access to ${currentChildName}.`,
         );
         setSearchEmail("");
         fetchParents();
@@ -477,7 +483,7 @@ export default function ChildSettings({
 
     Alert.alert(
       "Remove Access",
-      `Remove ${parent.display_name || parent.email}'s access to ${resolvedChildName}?`,
+      `Remove ${parent.display_name || parent.email}'s access to ${currentChildName}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -513,7 +519,7 @@ export default function ChildSettings({
   const handleDeleteChild = () => {
     Alert.alert(
       "Delete Child",
-      `Delete ${resolvedChildName} and all related calendar, activity, and expense data? This cannot be undone.`,
+      `Delete ${currentChildName} and all related calendar, activity, and expense data? This cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -522,7 +528,7 @@ export default function ChildSettings({
           onPress: () => {
             deleteChild.mutate(resolvedChildId, {
               onSuccess: () => {
-                Alert.alert("Deleted", `${resolvedChildName} has been deleted.`);
+                Alert.alert("Deleted", `${currentChildName} has been deleted.`);
                 router.replace("/(tabs)");
               },
               onError: (error) => {
@@ -558,7 +564,7 @@ export default function ChildSettings({
             { color: Colors[colorScheme ?? "light"].text },
           ]}
         >
-          Settings - {resolvedChildName}
+          Settings - {currentChildName}
         </Text>
       </View>
 
@@ -596,7 +602,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            Update {resolvedChildName}&apos;s basic information
+            Update {currentChildName}&apos;s basic information
           </Text>
 
           <View
@@ -830,7 +836,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            Manage which parents have access to {resolvedChildName}&apos;s information
+            Manage which parents have access to {currentChildName}&apos;s information
           </Text>
 
           {/* Add Parent */}
@@ -987,7 +993,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            Permanently remove {resolvedChildName} and all related data from the app.
+            Permanently remove {currentChildName} and all related data from the app.
           </Text>
           <TouchableOpacity
             style={[
@@ -1029,7 +1035,7 @@ export default function ChildSettings({
               { color: Colors[colorScheme ?? "light"].textSecondary },
             ]}
           >
-            All parents with access can view and manage {resolvedChildName}&apos;s calendar,
+            All parents with access can view and manage {currentChildName}&apos;s calendar,
             expenses, and other information.
           </Text>
         </View>
