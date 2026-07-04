@@ -13,6 +13,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
+    usesAppleSignIn: true,
     bundleIdentifier: "com.doplan.doplan",
     buildNumber: iosBuildNumber,
     infoPlist: {
@@ -35,6 +36,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     "expo-router",
+    "expo-apple-authentication",
     "expo-notifications",
     [
       "expo-splash-screen",

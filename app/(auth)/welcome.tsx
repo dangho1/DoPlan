@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
-import React from 'react'
+import * as AppleAuthentication from 'expo-apple-authentication'
+import React, { useState } from 'react'
 import { Alert, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Colors } from '../../constants/Colors'
 import { useColorScheme } from '../../hooks/useColorScheme'
+import { supabase } from '../../lib/supabase'
 
 interface WelcomeScreenProps {
   onEmailSignUp: () => void
@@ -11,14 +13,74 @@ interface WelcomeScreenProps {
 
 export default function WelcomeScreen({ onEmailSignUp, onLogin }: WelcomeScreenProps) {
   const colorScheme = useColorScheme()
+  const [appleLoading, setAppleLoading] = useState(false)
 
   // Placeholder functions for social logins
   function signInWithGoogle() {
     Alert.alert('Google Sign In', 'Google authentication coming soon!')
   }
 
-  function signInWithApple() {
-    Alert.alert('Apple Sign In', 'Apple authentication coming soon!')
+  async function signInWithApple() {
+    if (appleLoading) {
+      return
+    }
+
+    setAppleLoading(true)
+
+    try {
+      const isAvailable = await AppleAuthentication.isAvailableAsync()
+
+      if (!isAvailable) {
+        Alert.alert('Apple Sign In Unavailable', 'Apple authentication is only available on supported Apple devices.')
+        return
+      }
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      })
+
+      if (!credential.identityToken) {
+        Alert.alert('Apple Sign In Error', 'Apple did not return a login token. Please try again.')
+        return
+      }
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      })
+
+      if (error) {
+        Alert.alert('Apple Sign In Error', error.message)
+        return
+      }
+
+      const givenName = credential.fullName?.givenName ?? undefined
+      const familyName = credential.fullName?.familyName ?? undefined
+      const fullName = [givenName, familyName].filter(Boolean).join(' ')
+
+      if (fullName || givenName || familyName) {
+        await supabase.auth.updateUser({
+          data: {
+            full_name: fullName || undefined,
+            given_name: givenName,
+            family_name: familyName,
+          },
+        })
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to sign in with Apple. Please try again.'
+      const errorCode = error instanceof Error ? (error as Error & { code?: string }).code : undefined
+      const isCanceled = errorCode === 'ERR_REQUEST_CANCELED'
+
+      if (!isCanceled) {
+        Alert.alert('Apple Sign In Error', message)
+      }
+    } finally {
+      setAppleLoading(false)
+    }
   }
 
   function signInWithFacebook() {
@@ -29,37 +91,38 @@ export default function WelcomeScreen({ onEmailSignUp, onLogin }: WelcomeScreenP
     <SafeAreaView style={[styles.welcomeContainer, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
       <View style={styles.centerSection}>
         <Image
-          source={require('../../assets/images/logo.png')} 
+          source={require('../../assets/images/logo.png')}
           style={styles.logo}
           resizeMode="contain"
         />
-        
+
         <Text style={[styles.appName, { color: Colors[colorScheme ?? 'light'].text }]}>CoPlan</Text>
-        
+
         <Text style={[styles.tagline, { color: Colors[colorScheme ?? 'light'].text }]}>
           Ready to get your family{'\n'}organized?
         </Text>
       </View>
 
       <View style={styles.buttonSection}>
-        <TouchableOpacity 
-          style={[styles.googleButton, { backgroundColor: Colors[colorScheme ?? 'light'].googleButton, borderColor: Colors[colorScheme ?? 'light'].border }]} 
+        <TouchableOpacity
+          style={[styles.googleButton, { backgroundColor: Colors[colorScheme ?? 'light'].googleButton, borderColor: Colors[colorScheme ?? 'light'].border }]}
           onPress={signInWithGoogle}
         >
           <Ionicons name="logo-google" size={20} color={Colors[colorScheme ?? 'light'].textSecondary} />
           <Text style={[styles.socialButtonText, { color: Colors[colorScheme ?? 'light'].text }]}>Continue with Google</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.appleButton, { backgroundColor: Colors[colorScheme ?? 'light'].appleButton }]} 
+        <TouchableOpacity
+          style={[styles.appleButton, { backgroundColor: Colors[colorScheme ?? 'light'].appleButton }]}
           onPress={signInWithApple}
+          disabled={appleLoading}
         >
           <Ionicons name="logo-apple" size={20} color="#fff" />
-          <Text style={styles.appleSocialButtonText}>Continue with Apple</Text>
+          <Text style={styles.appleSocialButtonText}>{appleLoading ? 'Connecting to Apple...' : 'Continue with Apple'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.facebookButton, { backgroundColor: Colors[colorScheme ?? 'light'].facebookButton }]} 
+        <TouchableOpacity
+          style={[styles.facebookButton, { backgroundColor: Colors[colorScheme ?? 'light'].facebookButton }]}
           onPress={signInWithFacebook}
         >
           <Ionicons name="logo-facebook" size={20} color="#fff" />
@@ -68,8 +131,8 @@ export default function WelcomeScreen({ onEmailSignUp, onLogin }: WelcomeScreenP
 
         <Text style={[styles.orText, { color: Colors[colorScheme ?? 'light'].textSecondary }]}>or</Text>
 
-        <TouchableOpacity 
-          style={[styles.emailButton, { backgroundColor: Colors[colorScheme ?? 'light'].primary }]} 
+        <TouchableOpacity
+          style={[styles.emailButton, { backgroundColor: Colors[colorScheme ?? 'light'].primary }]}
           onPress={onEmailSignUp}
         >
           <Text style={styles.emailButtonText}>Sign up with email</Text>
