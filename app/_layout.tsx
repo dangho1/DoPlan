@@ -1,4 +1,4 @@
-import { Session } from "@supabase/supabase-js";
+import { isAuthRetryableFetchError, Session } from "@supabase/supabase-js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 import { Stack } from "expo-router";
@@ -11,6 +11,13 @@ import { supabase } from "../lib/supabase";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
 const queryClient = new QueryClient();
+
+// A refresh attempted right after the access token expires (e.g. opening the
+// app after it sat backgrounded overnight) can hit a transient network/server
+// error even though the persisted refresh token is still perfectly valid.
+// Retry a few times with backoff before treating the user as logged out.
+const SESSION_LOAD_MAX_RETRIES = 3;
+const SESSION_LOAD_RETRY_BASE_MS = 500;
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
@@ -37,20 +44,53 @@ export default function RootLayout() {
 
     checkPasswordRecovery();
 
-    supabase.auth
-      .getSession()
-      .then(({ data: { session } }: { data: { session: Session | null } }) => {
-        setSession(session);
-        setLoading(false);
-      })
-      .catch((error: unknown) => {
-        // Do NOT sign out here: a transient failure (e.g. network blip during
-        // token refresh) must not revoke the persisted session. If the refresh
-        // token is truly invalid, supabase-js emits SIGNED_OUT on its own.
-        console.error("Error getting session:", error);
-        setSession(null);
-        setLoading(false);
-      });
+    let cancelled = false;
+
+    const loadSession = async () => {
+      for (let attempt = 0; attempt <= SESSION_LOAD_MAX_RETRIES; attempt++) {
+        try {
+          const {
+            data: { session },
+            error,
+          } = await supabase.auth.getSession();
+
+          // A session, a non-retryable error (e.g. truly invalid refresh
+          // token), or the final attempt all resolve immediately. Do NOT sign
+          // out here: if the refresh token is truly invalid, supabase-js
+          // emits SIGNED_OUT on its own.
+          const isLastAttempt = attempt === SESSION_LOAD_MAX_RETRIES;
+          if (
+            session ||
+            !error ||
+            !isAuthRetryableFetchError(error) ||
+            isLastAttempt
+          ) {
+            if (!cancelled) {
+              if (error) console.error("Error getting session:", error);
+              setSession(session);
+              setLoading(false);
+            }
+            return;
+          }
+
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              SESSION_LOAD_RETRY_BASE_MS * Math.pow(2, attempt),
+            ),
+          );
+        } catch (error) {
+          if (!cancelled) {
+            console.error("Error getting session:", error);
+            setSession(null);
+            setLoading(false);
+          }
+          return;
+        }
+      }
+    };
+
+    loadSession();
 
     try {
       const { data: subscription } = supabase.auth.onAuthStateChange(
@@ -71,11 +111,14 @@ export default function RootLayout() {
       );
 
       return () => {
+        cancelled = true;
         subscription?.subscription?.unsubscribe();
       };
     } catch (error) {
       console.error("Error setting up auth state change listener:", error);
-      return () => {};
+      return () => {
+        cancelled = true;
+      };
     }
   }, []);
 
