@@ -54,6 +54,148 @@ import {
   parseMinutes,
 } from "./calendar/utils";
 
+
+const TIME_WHEEL_ITEM_HEIGHT = 44;
+const TIME_WHEEL_VISIBLE_ITEMS = 5;
+const TIME_WHEEL_VERTICAL_PADDING =
+  (TIME_WHEEL_ITEM_HEIGHT * (TIME_WHEEL_VISIBLE_ITEMS - 1)) / 2;
+
+const formatTimeUnit = (value: number) => value.toString().padStart(2, "0");
+
+const normalizeClockTime = (value: string) => {
+  const [rawHour = "0", rawMinute = "0"] = value.split(":");
+  const hour = Number.parseInt(rawHour, 10);
+  const minute = Number.parseInt(rawMinute, 10);
+
+  return `${formatTimeUnit(Number.isFinite(hour) ? Math.min(Math.max(hour, 0), 23) : 0)}:${formatTimeUnit(
+    Number.isFinite(minute) ? Math.min(Math.max(minute, 0), 59) : 0,
+  )}`;
+};
+
+type TimeWheelPickerProps = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+function TimeWheelPicker({ label, value, onChange }: TimeWheelPickerProps) {
+  const colorScheme = useColorScheme();
+  const normalizedValue = normalizeClockTime(value);
+  const [selectedHour, selectedMinute] = normalizedValue.split(":").map(Number);
+  const hourScrollRef = useRef<ScrollView | null>(null);
+  const minuteScrollRef = useRef<ScrollView | null>(null);
+  const hours = Array.from({ length: 24 }, (_, index) => index);
+  const minutes = Array.from({ length: 60 }, (_, index) => index);
+
+  useEffect(() => {
+    hourScrollRef.current?.scrollTo({
+      y: selectedHour * TIME_WHEEL_ITEM_HEIGHT,
+      animated: false,
+    });
+    minuteScrollRef.current?.scrollTo({
+      y: selectedMinute * TIME_WHEEL_ITEM_HEIGHT,
+      animated: false,
+    });
+  }, [selectedHour, selectedMinute]);
+
+  const updateTime = (nextHour: number, nextMinute: number) => {
+    onChange(`${formatTimeUnit(nextHour)}:${formatTimeUnit(nextMinute)}`);
+  };
+
+  const handleWheelEnd = (type: "hour" | "minute", offsetY: number) => {
+    const maxValue = type === "hour" ? 23 : 59;
+    const nextValue = Math.min(
+      Math.max(Math.round(offsetY / TIME_WHEEL_ITEM_HEIGHT), 0),
+      maxValue,
+    );
+
+    if (type === "hour") {
+      updateTime(nextValue, selectedMinute);
+      return;
+    }
+
+    updateTime(selectedHour, nextValue);
+  };
+
+  const renderWheel = (
+    values: number[],
+    selectedValue: number,
+    type: "hour" | "minute",
+    ref: React.RefObject<ScrollView | null>,
+  ) => (
+    <ScrollView
+      ref={ref}
+      showsVerticalScrollIndicator={false}
+      snapToInterval={TIME_WHEEL_ITEM_HEIGHT}
+      decelerationRate="fast"
+      bounces={false}
+      contentContainerStyle={styles.timeWheelContent}
+      onMomentumScrollEnd={(event) =>
+        handleWheelEnd(type, event.nativeEvent.contentOffset.y)
+      }
+      onScrollEndDrag={(event) =>
+        handleWheelEnd(type, event.nativeEvent.contentOffset.y)
+      }
+    >
+      {values.map((item) => {
+        const isSelected = item === selectedValue;
+        return (
+          <View key={`${type}-${item}`} style={styles.timeWheelItem}>
+            <Text
+              style={[
+                styles.timeWheelItemText,
+                {
+                  color: isSelected
+                    ? Colors[colorScheme ?? "light"].text
+                    : Colors[colorScheme ?? "light"].textLight,
+                  opacity: isSelected ? 1 : 0.45,
+                },
+              ]}
+            >
+              {formatTimeUnit(item)}
+            </Text>
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+
+  return (
+    <View style={styles.timeWheelContainer}>
+      <Text
+        style={[styles.timeLabel, { color: Colors[colorScheme ?? "light"].text }]}
+      >
+        {label}
+      </Text>
+      <View
+        style={[
+          styles.timeWheelFrame,
+          {
+            backgroundColor: Colors[colorScheme ?? "light"].inputBackground,
+            borderColor: Colors[colorScheme ?? "light"].border,
+          },
+        ]}
+      >
+        <View
+          pointerEvents="none"
+          style={[
+            styles.timeWheelSelection,
+            { backgroundColor: colorScheme === "dark" ? "#3A3A3C" : "#E9E9EC" },
+          ]}
+        />
+        {renderWheel(hours, selectedHour, "hour", hourScrollRef)}
+        <Text
+          pointerEvents="none"
+          style={[styles.timeWheelSeparator, { color: Colors[colorScheme ?? "light"].text }]}
+        >
+          :
+        </Text>
+        {renderWheel(minutes, selectedMinute, "minute", minuteScrollRef)}
+      </View>
+    </View>
+  );
+}
+
 interface CalendarProps {
   childName?: string;
   childId?: string;
@@ -81,8 +223,6 @@ export default function Calendar({
   const addEventScrollRef = useRef<ScrollView | null>(null);
   const addEventDateInputRef = useRef<TextInput | null>(null);
   const addEventNameInputRef = useRef<TextInput | null>(null);
-  const addEventStartTimeInputRef = useRef<TextInput | null>(null);
-  const addEventEndTimeInputRef = useRef<TextInput | null>(null);
   const currentAddEventScrollYRef = useRef(0);
   const pendingAddEventFocusRef = useRef<TextInput | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -137,8 +277,6 @@ export default function Calendar({
 
   const addEventDateAccessoryId = "calendarAddEventDateAccessory";
   const addEventNameAccessoryId = "calendarAddEventNameAccessory";
-  const addEventStartTimeAccessoryId = "calendarAddEventStartTimeAccessory";
-  const addEventEndTimeAccessoryId = "calendarAddEventEndTimeAccessory";
 
   const selectedAlertLabel =
     EVENT_ALERT_OPTIONS.find(
@@ -2316,122 +2454,16 @@ export default function Calendar({
 
               {!newEventAllDay ? (
                 <View style={styles.timeInputsRow}>
-                  <View style={styles.timeInputContainer}>
-                    <Text
-                      style={[
-                        styles.timeLabel,
-                        { color: Colors[colorScheme ?? "light"].text },
-                      ]}
-                    >
-                      Start Time
-                    </Text>
-                    <TextInput
-                      ref={(ref) => {
-                        if (ref) {
-                          addEventStartTimeInputRef.current = ref;
-                        }
-                      }}
-                      style={[
-                        styles.timeInput,
-                        {
-                          backgroundColor:
-                            Colors[colorScheme ?? "light"].inputBackground,
-                          color: Colors[colorScheme ?? "light"].text,
-                          borderColor: Colors[colorScheme ?? "light"].border,
-                        },
-                      ]}
-                      value={startTime}
-                      onChangeText={setStartTime}
-                      onFocus={() =>
-                        handleAddEventInputFocus(
-                          addEventStartTimeInputRef.current,
-                        )
-                      }
-                      placeholder="09:00"
-                      placeholderTextColor={
-                        Colors[colorScheme ?? "light"].textLight
-                      }
-                      inputAccessoryViewID={
-                        Platform.OS === "ios"
-                          ? addEventStartTimeAccessoryId
-                          : undefined
-                      }
-                      keyboardType={
-                        Platform.OS === "ios"
-                          ? "numbers-and-punctuation"
-                          : "default"
-                      }
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      spellCheck={false}
-                      autoComplete="off"
-                      textContentType="none"
-                      smartInsertDelete={false}
-                      smartDashesType="no"
-                      smartQuotesType="no"
-                      returnKeyType="done"
-                      onSubmitEditing={dismissAddEventKeyboard}
-                      blurOnSubmit
-                    />
-                  </View>
-                  <View style={styles.timeInputContainer}>
-                    <Text
-                      style={[
-                        styles.timeLabel,
-                        { color: Colors[colorScheme ?? "light"].text },
-                      ]}
-                    >
-                      End Time
-                    </Text>
-                    <TextInput
-                      ref={(ref) => {
-                        if (ref) {
-                          addEventEndTimeInputRef.current = ref;
-                        }
-                      }}
-                      style={[
-                        styles.timeInput,
-                        {
-                          backgroundColor:
-                            Colors[colorScheme ?? "light"].inputBackground,
-                          color: Colors[colorScheme ?? "light"].text,
-                          borderColor: Colors[colorScheme ?? "light"].border,
-                        },
-                      ]}
-                      value={endTime}
-                      onChangeText={setEndTime}
-                      onFocus={() =>
-                        handleAddEventInputFocus(
-                          addEventEndTimeInputRef.current,
-                        )
-                      }
-                      placeholder="17:00"
-                      placeholderTextColor={
-                        Colors[colorScheme ?? "light"].textLight
-                      }
-                      inputAccessoryViewID={
-                        Platform.OS === "ios"
-                          ? addEventEndTimeAccessoryId
-                          : undefined
-                      }
-                      keyboardType={
-                        Platform.OS === "ios"
-                          ? "numbers-and-punctuation"
-                          : "default"
-                      }
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      spellCheck={false}
-                      autoComplete="off"
-                      textContentType="none"
-                      smartInsertDelete={false}
-                      smartDashesType="no"
-                      smartQuotesType="no"
-                      returnKeyType="done"
-                      onSubmitEditing={dismissAddEventKeyboard}
-                      blurOnSubmit
-                    />
-                  </View>
+                  <TimeWheelPicker
+                    label="Start Time"
+                    value={startTime}
+                    onChange={setStartTime}
+                  />
+                  <TimeWheelPicker
+                    label="End Time"
+                    value={endTime}
+                    onChange={setEndTime}
+                  />
                 </View>
               ) : (
                 <Text
@@ -2515,58 +2547,6 @@ export default function Calendar({
                   </View>
                 </InputAccessoryView>
                 <InputAccessoryView nativeID={addEventNameAccessoryId}>
-                  <View
-                    style={[
-                      styles.keyboardAccessory,
-                      {
-                        backgroundColor:
-                          Colors[colorScheme ?? "light"].cardBackground,
-                        borderTopColor: Colors[colorScheme ?? "light"].border,
-                      },
-                    ]}
-                  >
-                    <TouchableOpacity
-                      style={styles.keyboardAccessoryDoneButton}
-                      onPress={dismissAddEventKeyboard}
-                    >
-                      <Text
-                        style={[
-                          styles.keyboardAccessoryDoneText,
-                          { color: Colors[colorScheme ?? "light"].tint },
-                        ]}
-                      >
-                        Done
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </InputAccessoryView>
-                <InputAccessoryView nativeID={addEventStartTimeAccessoryId}>
-                  <View
-                    style={[
-                      styles.keyboardAccessory,
-                      {
-                        backgroundColor:
-                          Colors[colorScheme ?? "light"].cardBackground,
-                        borderTopColor: Colors[colorScheme ?? "light"].border,
-                      },
-                    ]}
-                  >
-                    <TouchableOpacity
-                      style={styles.keyboardAccessoryDoneButton}
-                      onPress={dismissAddEventKeyboard}
-                    >
-                      <Text
-                        style={[
-                          styles.keyboardAccessoryDoneText,
-                          { color: Colors[colorScheme ?? "light"].tint },
-                        ]}
-                      >
-                        Done
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </InputAccessoryView>
-                <InputAccessoryView nativeID={addEventEndTimeAccessoryId}>
                   <View
                     style={[
                       styles.keyboardAccessory,
@@ -3398,6 +3378,9 @@ const styles = StyleSheet.create({
   timeInputContainer: {
     flex: 1,
   },
+  timeWheelContainer: {
+    flex: 1,
+  },
   timeLabel: {
     fontSize: 14,
     fontWeight: "500",
@@ -3409,6 +3392,44 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     textAlign: "center",
+  },
+  timeWheelFrame: {
+    alignItems: "center",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    height: TIME_WHEEL_ITEM_HEIGHT * TIME_WHEEL_VISIBLE_ITEMS,
+    justifyContent: "center",
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    position: "relative",
+  },
+  timeWheelSelection: {
+    borderRadius: 14,
+    height: TIME_WHEEL_ITEM_HEIGHT,
+    left: 10,
+    position: "absolute",
+    right: 10,
+    top: TIME_WHEEL_VERTICAL_PADDING,
+  },
+  timeWheelContent: {
+    paddingVertical: TIME_WHEEL_VERTICAL_PADDING,
+  },
+  timeWheelItem: {
+    alignItems: "center",
+    height: TIME_WHEEL_ITEM_HEIGHT,
+    justifyContent: "center",
+    minWidth: 48,
+  },
+  timeWheelItemText: {
+    fontSize: 30,
+    fontWeight: "500",
+  },
+  timeWheelSeparator: {
+    fontSize: 30,
+    fontWeight: "500",
+    marginHorizontal: 2,
+    zIndex: 1,
   },
   modalButtons: {
     flexDirection: "row",
