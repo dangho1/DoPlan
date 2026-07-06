@@ -92,6 +92,44 @@ export type Database = {
         };
         Relationships: [];
       };
+      custody_schedule_change_requests: {
+        Row: {
+          child_id: string;
+          created_at: string;
+          id: string;
+          proposed_schedules: Json;
+          requested_by: string | null;
+          reviewed_at: string | null;
+          status: string;
+        };
+        Insert: {
+          child_id: string;
+          created_at?: string;
+          id?: string;
+          proposed_schedules?: Json;
+          requested_by?: string | null;
+          reviewed_at?: string | null;
+          status?: string;
+        };
+        Update: {
+          child_id?: string;
+          created_at?: string;
+          id?: string;
+          proposed_schedules?: Json;
+          requested_by?: string | null;
+          reviewed_at?: string | null;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "custody_schedule_change_requests_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       custody_schedules: {
         Row: {
           child_id: string;

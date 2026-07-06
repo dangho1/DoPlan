@@ -33,6 +33,15 @@ export interface CustodyDraft {
   weekPattern: WeekPattern;
 }
 
+export interface CustodyScheduleChangeRequest {
+  id: string;
+  child_id: string;
+  requested_by: string;
+  proposed_schedules: Record<string, CustodyDraft>;
+  status: "pending" | "approved" | "rejected";
+  created_at: string | null;
+}
+
 export interface RecurringActivity {
   id: string;
   activity_name: string;

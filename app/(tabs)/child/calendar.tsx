@@ -37,6 +37,7 @@ import type {
   CalendarEvent,
   CustodyDraft,
   CustodySchedule,
+  CustodyScheduleChangeRequest,
   CustodyTemplate,
   RecurringActivity,
   WeekPattern,
@@ -121,6 +122,9 @@ export default function Calendar({
   const [custodyDrafts, setCustodyDrafts] = useState<
     Record<string, CustodyDraft>
   >({});
+  const [custodyChangeRequests, setCustodyChangeRequests] = useState<
+    CustodyScheduleChangeRequest[]
+  >([]);
 
   const dayContentTranslateX = useRef(new Animated.Value(0)).current;
   const transitionContentTranslateX = useRef(new Animated.Value(0)).current;
@@ -174,6 +178,7 @@ export default function Calendar({
       fetchCustodySchedules(),
       fetchRecurringActivities(),
       fetchParents(),
+      fetchCustodyChangeRequests(),
     ]);
     setLoading(false);
   };
@@ -359,6 +364,49 @@ export default function Calendar({
       setCustodySchedules(schedulesWithNames);
     } catch (error) {
       console.error("Error fetching custody schedules:", error);
+    }
+  };
+
+  const fetchCustodyChangeRequests = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("custody_schedule_change_requests")
+        .select(
+          "id, child_id, requested_by, proposed_schedules, status, created_at",
+        )
+        .eq("child_id", resolvedChildId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        if (
+          error.message?.includes("custody_schedule_change_requests") ||
+          error.message?.includes("schema cache")
+        ) {
+          setCustodyChangeRequests([]);
+          return;
+        }
+        console.error("Error fetching custody change requests:", error);
+        return;
+      }
+
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData?.user?.id;
+
+      setCustodyChangeRequests(
+        ((data || []) as any[])
+          .filter((request) => request.requested_by !== currentUserId)
+          .map((request) => ({
+          ...request,
+          proposed_schedules:
+            request.proposed_schedules &&
+            typeof request.proposed_schedules === "object"
+              ? request.proposed_schedules
+              : {},
+          })),
+      );
+    } catch (error) {
+      console.error("Error fetching custody change requests:", error);
     }
   };
 
@@ -641,83 +689,135 @@ export default function Calendar({
   const isValidTimeInput = (value: string) =>
     /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
 
-  const saveCustodySchedules = async () => {
-    try {
-      for (const parent of parents) {
-        const draft = custodyDrafts[parent.id] || {
-          days: [],
-          dayTimeRanges: {},
-          weekPattern: "all" as WeekPattern,
-        };
-        const normalizedWeekPattern: WeekPattern =
-          draft.weekPattern === "odd" || draft.weekPattern === "even"
-            ? draft.weekPattern
-            : "all";
-        const normalizedDays = [...new Set(draft.days)].sort((a, b) => a - b);
-        const existingSchedule = custodySchedules.find(
-          (s) => s.user_id === parent.id,
-        );
+  const validateCustodyDrafts = (drafts: Record<string, CustodyDraft>) => {
+    for (const parent of parents) {
+      const draft = drafts[parent.id] || {
+        days: [],
+        dayTimeRanges: {},
+        weekPattern: "all" as WeekPattern,
+      };
+      const normalizedDays = [...new Set(draft.days)].sort((a, b) => a - b);
 
-        for (const day of normalizedDays) {
-          const range = draft.dayTimeRanges[day];
-          if (
-            !range ||
-            !isValidTimeInput(range.start) ||
-            !isValidTimeInput(range.end)
-          ) {
-            Alert.alert(
-              "Invalid time",
-              `Use HH:MM format for ${parent.name} on ${dayLabelForIndex[day]}.`,
-            );
-            return;
-          }
+      for (const day of normalizedDays) {
+        const range = draft.dayTimeRanges[day];
+        if (
+          !range ||
+          !isValidTimeInput(range.start) ||
+          !isValidTimeInput(range.end)
+        ) {
+          Alert.alert(
+            "Invalid time",
+            `Use HH:MM format for ${parent.name} on ${dayLabelForIndex[day]}.`,
+          );
+          return false;
         }
+      }
+    }
 
-        const dayTimeRangesPayload = normalizedDays.reduce(
-          (acc, day) => {
-            acc[day] = draft.dayTimeRanges[day] || {
-              start: "00:00",
-              end: "23:59",
-            };
-            return acc;
-          },
-          {} as Record<number, { start: string; end: string }>,
-        );
+    return true;
+  };
 
-        if (normalizedDays.length === 0) {
-          if (existingSchedule) {
-            const { error } = await supabase
-              .from("custody_schedules")
-              .delete()
-              .eq("id", existingSchedule.id);
-            if (error) throw error;
-          }
-          continue;
-        }
+  const applyCustodyDrafts = async (drafts: Record<string, CustodyDraft>) => {
+    for (const parent of parents) {
+      const draft = drafts[parent.id] || {
+        days: [],
+        dayTimeRanges: {},
+        weekPattern: "all" as WeekPattern,
+      };
+      const normalizedWeekPattern: WeekPattern =
+        draft.weekPattern === "odd" || draft.weekPattern === "even"
+          ? draft.weekPattern
+          : "all";
+      const normalizedDays = [...new Set(draft.days)].sort((a, b) => a - b);
+      const existingSchedule = custodySchedules.find(
+        (s) => s.user_id === parent.id,
+      );
+      const dayTimeRangesPayload = normalizedDays.reduce(
+        (acc, day) => {
+          acc[day] = draft.dayTimeRanges[day] || {
+            start: "00:00",
+            end: "23:59",
+          };
+          return acc;
+        },
+        {} as Record<number, { start: string; end: string }>,
+      );
 
+      if (normalizedDays.length === 0) {
         if (existingSchedule) {
           const { error } = await supabase
             .from("custody_schedules")
-            .update({
-              days_of_week: normalizedDays,
-              day_time_ranges: dayTimeRangesPayload,
-              week_pattern: normalizedWeekPattern,
-            })
+            .delete()
             .eq("id", existingSchedule.id);
           if (error) throw error;
-        } else {
-          const { error } = await supabase.from("custody_schedules").insert({
-            user_id: parent.id,
-            child_id: resolvedChildId,
-            color: parent.color,
+        }
+        continue;
+      }
+
+      if (existingSchedule) {
+        const { error } = await supabase
+          .from("custody_schedules")
+          .update({
             days_of_week: normalizedDays,
             day_time_ranges: dayTimeRangesPayload,
             week_pattern: normalizedWeekPattern,
-          });
-          if (error) throw error;
-        }
+          })
+          .eq("id", existingSchedule.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("custody_schedules").insert({
+          user_id: parent.id,
+          child_id: resolvedChildId,
+          color: parent.color,
+          days_of_week: normalizedDays,
+          day_time_ranges: dayTimeRangesPayload,
+          week_pattern: normalizedWeekPattern,
+        });
+        if (error) throw error;
+      }
+    }
+  };
+
+  const saveCustodySchedules = async () => {
+    try {
+      if (!validateCustodyDrafts(custodyDrafts)) return;
+
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData?.user?.id;
+      if (!currentUserId) {
+        Alert.alert(
+          "Error",
+          "You must be signed in to change custody schedules.",
+        );
+        return;
       }
 
+      const requiresApproval =
+        parents.length > 1 &&
+        parents.some((parent) => parent.id !== currentUserId);
+
+      if (requiresApproval) {
+        const { error } = await supabase
+          .from("custody_schedule_change_requests")
+          .insert({
+            child_id: resolvedChildId,
+            requested_by: currentUserId,
+            proposed_schedules: custodyDrafts as any,
+            status: "pending",
+          });
+
+        if (error) throw error;
+
+        await fetchCustodyChangeRequests();
+        setCustodyModalVisible(false);
+        Alert.alert(
+          "Proposal sent",
+          "The custody schedule change has been sent to the other guardian for approval.",
+        );
+        return;
+      }
+
+      await applyCustodyDrafts(custodyDrafts);
       await fetchCustodySchedules();
       setCustodyModalVisible(false);
     } catch (error) {
@@ -730,6 +830,39 @@ export default function Calendar({
         return;
       }
       Alert.alert("Error", "Failed to save custody schedule changes.");
+    }
+  };
+
+  const approveCustodyChangeRequest = async (
+    request: CustodyScheduleChangeRequest,
+  ) => {
+    try {
+      if (!validateCustodyDrafts(request.proposed_schedules)) return;
+      await applyCustodyDrafts(request.proposed_schedules);
+      const { error } = await supabase
+        .from("custody_schedule_change_requests")
+        .update({ status: "approved", reviewed_at: new Date().toISOString() })
+        .eq("id", request.id);
+      if (error) throw error;
+      await Promise.all([fetchCustodySchedules(), fetchCustodyChangeRequests()]);
+      Alert.alert("Approved", "The custody schedule has been updated.");
+    } catch (error) {
+      console.error("Error approving custody change request:", error);
+      Alert.alert("Error", "Failed to approve custody schedule change.");
+    }
+  };
+
+  const rejectCustodyChangeRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from("custody_schedule_change_requests")
+        .update({ status: "rejected", reviewed_at: new Date().toISOString() })
+        .eq("id", requestId);
+      if (error) throw error;
+      await fetchCustodyChangeRequests();
+    } catch (error) {
+      console.error("Error rejecting custody change request:", error);
+      Alert.alert("Error", "Failed to reject custody schedule change.");
     }
   };
 
@@ -2424,8 +2557,58 @@ export default function Calendar({
             >
               {parents.length === 0
                 ? "No guardians found for this child"
-                : `Assign days for ${parents.length} guardian${parents.length > 1 ? "s" : ""}`}
+                : parents.length > 1
+                  ? "Changes are sent as proposals that another guardian must approve"
+                  : `Assign days for ${parents.length} guardian${parents.length > 1 ? "s" : ""}`}
             </Text>
+
+            {custodyChangeRequests.length > 0 && (
+              <View
+                style={[
+                  styles.changeRequestPanel,
+                  {
+                    backgroundColor: isDarkMode ? "#2A2418" : "#FFF7E6",
+                    borderColor: isDarkMode ? "#8A6D2F" : "#F5C35B",
+                  },
+                ]}
+              >
+                <Text style={[styles.changeRequestTitle, { color: theme.text }]}>
+                  Pending custody change proposals
+                </Text>
+                <Text
+                  style={[
+                    styles.changeRequestText,
+                    { color: isDarkMode ? theme.textSecondary : theme.textLight },
+                  ]}
+                >
+                  Review proposed week distribution changes before they are applied.
+                </Text>
+                {custodyChangeRequests.map((request) => (
+                  <View key={request.id} style={styles.changeRequestActions}>
+                    <Text style={[styles.changeRequestDate, { color: theme.text }]}>
+                      {request.created_at
+                        ? new Date(request.created_at).toLocaleDateString()
+                        : "New proposal"}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.requestActionButton, { backgroundColor: theme.tint }]}
+                      onPress={() => approveCustodyChangeRequest(request)}
+                    >
+                      <Text style={styles.requestActionButtonText}>Approve</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.requestActionButton,
+                        { backgroundColor: "#E74C3C" },
+                      ]}
+                      onPress={() => rejectCustodyChangeRequest(request.id)}
+                    >
+                      <Text style={styles.requestActionButtonText}>Reject</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {parents.length === 0 ? (
               <View style={styles.emptyState}>
@@ -2794,7 +2977,7 @@ export default function Calendar({
               style={[styles.doneButton, { backgroundColor: theme.tint }]}
               onPress={saveCustodySchedules}
             >
-              <Text style={styles.doneButtonText}>Save Schedule</Text>
+              <Text style={styles.doneButtonText}>{parents.length > 1 ? "Send Proposal" : "Save Schedule"}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -3253,6 +3436,43 @@ const styles = StyleSheet.create({
   parentsContainer: {
     maxHeight: 500,
   },
+  changeRequestPanel: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  changeRequestTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  changeRequestText: {
+    fontSize: 12,
+    marginBottom: 10,
+  },
+  changeRequestActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+  },
+  changeRequestDate: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  requestActionButton: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  requestActionButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
   parentSection: {
     marginBottom: 24,
     padding: 16,
