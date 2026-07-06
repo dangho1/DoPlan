@@ -668,6 +668,7 @@ export default function Calendar({
         ((segment.endMinutes - segment.startMinutes) / (24 * 60)) * 100,
       ),
       color: segment.color,
+      rowIndex: index,
     }));
   };
 
@@ -1792,7 +1793,15 @@ export default function Calendar({
                         {/* Custody Bar */}
                         {custodySegments.length > 0 && (
                           <View
-                            style={styles.custodyBarContainer}
+                            style={[
+                              styles.custodyBarContainer,
+                              {
+                                height: Math.min(
+                                  custodySegments.length * 4,
+                                  16,
+                                ),
+                              },
+                            ]}
                             pointerEvents="none"
                           >
                             {custodySegments.map((segment) => (
@@ -1803,6 +1812,7 @@ export default function Calendar({
                                   {
                                     backgroundColor: segment.color,
                                     left: `${segment.leftPercent}%`,
+                                    top: (segment.rowIndex % 4) * 4,
                                     width: `${segment.widthPercent}%`,
                                   },
                                 ]}
@@ -2927,23 +2937,18 @@ export default function Calendar({
                                   toggleCustodyDay(parent.id, index)
                                 }
                               >
-                                <View style={styles.dayLetters}>
-                                  {day.split("").map((letter, i) => (
-                                    <Text
-                                      key={i}
-                                      style={[
-                                        styles.dayButtonText,
-                                        {
-                                          color: isSelected
-                                            ? getReadableTextColor(parent.color)
-                                            : theme.text,
-                                        },
-                                      ]}
-                                    >
-                                      {letter}
-                                    </Text>
-                                  ))}
-                                </View>
+                                <Text
+                                  style={[
+                                    styles.dayButtonText,
+                                    {
+                                      color: isSelected
+                                        ? getReadableTextColor(parent.color)
+                                        : theme.text,
+                                    },
+                                  ]}
+                                >
+                                  {day}
+                                </Text>
                               </TouchableOpacity>
                             );
                           },
@@ -3544,9 +3549,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     borderWidth: 1,
-    padding: 24,
-    width: "90%",
-    maxHeight: "80%",
+    padding: 16,
+    width: "94%",
+    maxHeight: "88%",
   },
   custodyModalHeader: {
     flexDirection: "row",
@@ -3572,12 +3577,12 @@ const styles = StyleSheet.create({
     width: 72,
   },
   custodySubtitle: {
-    fontSize: 14,
-    marginBottom: 20,
+    fontSize: 13,
+    marginBottom: 12,
     textAlign: "center",
   },
   parentsContainer: {
-    maxHeight: 500,
+    maxHeight: 560,
   },
   changeRequestPanel: {
     borderWidth: 1,
@@ -3617,21 +3622,21 @@ const styles = StyleSheet.create({
   },
 
   parentSection: {
-    marginBottom: 24,
-    padding: 16,
+    marginBottom: 12,
+    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
   },
   parentHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   templateRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
+    marginBottom: 6,
   },
   weekPatternRow: {
     flexDirection: "row",
@@ -3641,9 +3646,9 @@ const styles = StyleSheet.create({
   },
   weekPatternChip: {
     borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   weekPatternChipText: {
     fontSize: 12,
@@ -3660,9 +3665,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   parentColorDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     marginRight: 8,
   },
   parentName: {
@@ -3676,13 +3681,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   dayButton: {
-    paddingHorizontal: 6,
-    paddingVertical: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 2,
     flex: 1,
-    maxWidth: 48,
-    minHeight: 50,
+    maxWidth: 54,
+    minHeight: 36,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3701,11 +3706,11 @@ const styles = StyleSheet.create({
   timeRangeRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   timeRangeDayLabel: {
-    width: 36,
-    fontSize: 13,
+    width: 34,
+    fontSize: 12,
     fontWeight: "600",
   },
   timeRangeInput: {
@@ -3713,18 +3718,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
-    minWidth: 76,
+    minWidth: 70,
     textAlign: "center",
-    fontSize: 13,
+    fontSize: 12,
   },
   timeRangeSeparator: {
     fontSize: 12,
     fontWeight: "500",
   },
   dayButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-    lineHeight: 14,
     textTransform: "uppercase",
   },
   emptyState: {
@@ -3738,14 +3742,14 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   doneButton: {
-    padding: 16,
+    padding: 14,
     borderRadius: 12,
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 12,
   },
   doneButtonText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
   },
 });
