@@ -66,7 +66,10 @@ export default function Calendar({
   onCancel,
 }: CalendarProps) {
   const router = useRouter();
-  const params = useLocalSearchParams<{ childName?: string; childId?: string }>();
+  const params = useLocalSearchParams<{
+    childName?: string;
+    childId?: string;
+  }>();
   const resolvedChildName =
     childName ?? (typeof params.childName === "string" ? params.childName : "");
   const resolvedChildId =
@@ -530,7 +533,7 @@ export default function Calendar({
     }));
   };
 
-  const initializeCustodyDrafts = () => {
+  const buildInitialCustodyDrafts = () => {
     const drafts: Record<string, CustodyDraft> = {};
 
     parents.forEach((parent) => {
@@ -553,7 +556,73 @@ export default function Calendar({
       };
     });
 
-    setCustodyDrafts(drafts);
+    return drafts;
+  };
+
+  const normalizeCustodyDraftsForComparison = (
+    drafts: Record<string, CustodyDraft>,
+  ) =>
+    parents.reduce(
+      (acc, parent) => {
+        const draft = drafts[parent.id] || {
+          days: [],
+          dayTimeRanges: {},
+          weekPattern: "all" as WeekPattern,
+        };
+        const days = [...new Set(draft.days)].sort((a, b) => a - b);
+
+        acc[parent.id] = {
+          days,
+          dayTimeRanges: days.reduce(
+            (ranges, day) => {
+              ranges[day] = draft.dayTimeRanges[day] || {
+                start: "00:00",
+                end: "23:59",
+              };
+              return ranges;
+            },
+            {} as Record<number, { start: string; end: string }>,
+          ),
+          weekPattern:
+            draft.weekPattern === "odd" || draft.weekPattern === "even"
+              ? draft.weekPattern
+              : "all",
+        };
+
+        return acc;
+      },
+      {} as Record<string, CustodyDraft>,
+    );
+
+  const hasUnsavedCustodyChanges = () =>
+    JSON.stringify(normalizeCustodyDraftsForComparison(custodyDrafts)) !==
+    JSON.stringify(
+      normalizeCustodyDraftsForComparison(buildInitialCustodyDrafts()),
+    );
+
+  const closeCustodyModal = () => {
+    if (!hasUnsavedCustodyChanges()) {
+      setCustodyModalVisible(false);
+      return;
+    }
+
+    Alert.alert(
+      "Unsaved changes",
+      "Do you want to continue editing or save your custody schedule changes?",
+      [
+        { text: "Continue editing", style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => setCustodyModalVisible(false),
+        },
+        { text: "Save", onPress: saveCustodySchedules },
+      ],
+    );
+  };
+
+  const initializeCustodyDrafts = () => {
+    setCustodyDrafts(buildInitialCustodyDrafts());
   };
 
   useEffect(() => {
@@ -1148,12 +1217,14 @@ export default function Calendar({
                 if (newDate && !Number.isNaN(newDate.getTime())) {
                   const startParts = selectedEvent.start_time?.split("T");
                   const endParts = selectedEvent.end_time?.split("T");
-                  const timeStr = startParts && startParts.length > 1
-                    ? startParts[1].split(".")[0]
-                    : "00:00:00";
-                  const endTimeStr = endParts && endParts.length > 1
-                    ? endParts[1].split(".")[0]
-                    : "23:59:59";
+                  const timeStr =
+                    startParts && startParts.length > 1
+                      ? startParts[1].split(".")[0]
+                      : "00:00:00";
+                  const endTimeStr =
+                    endParts && endParts.length > 1
+                      ? endParts[1].split(".")[0]
+                      : "23:59:59";
 
                   setSelectedEvent({
                     ...selectedEvent,
@@ -1229,7 +1300,10 @@ export default function Calendar({
               onChangeText={(text) => {
                 if (!selectedEvent) return;
                 const parts = selectedEvent.start_time.split("T");
-                const dateStr = parts.length > 0 ? parts[0] : new Date().toISOString().split("T")[0];
+                const dateStr =
+                  parts.length > 0
+                    ? parts[0]
+                    : new Date().toISOString().split("T")[0];
                 if (/^\d{0,2}:\d{0,2}$/.test(text)) {
                   setSelectedEvent({
                     ...selectedEvent,
@@ -1272,7 +1346,10 @@ export default function Calendar({
               onChangeText={(text) => {
                 if (!selectedEvent) return;
                 const parts = selectedEvent.end_time.split("T");
-                const dateStr = parts.length > 0 ? parts[0] : new Date().toISOString().split("T")[0];
+                const dateStr =
+                  parts.length > 0
+                    ? parts[0]
+                    : new Date().toISOString().split("T")[0];
                 if (/^\d{0,2}:\d{0,2}$/.test(text)) {
                   setSelectedEvent({
                     ...selectedEvent,
@@ -2535,6 +2612,7 @@ export default function Calendar({
         visible={custodyModalVisible}
         animationType="slide"
         transparent={true}
+        onRequestClose={closeCustodyModal}
       >
         <View style={styles.modalOverlay}>
           <View
@@ -2546,9 +2624,30 @@ export default function Calendar({
               },
             ]}
           >
-            <Text style={[styles.modalTitle, { color: theme.text }]}>
-              Custody Schedule
-            </Text>
+            <View style={styles.custodyModalHeader}>
+              <TouchableOpacity
+                style={styles.custodyBackButton}
+                onPress={closeCustodyModal}
+                accessibilityRole="button"
+                accessibilityLabel="Go back from custody schedule"
+              >
+                <Text
+                  style={[styles.custodyBackButtonText, { color: theme.tint }]}
+                >
+                  ‹ Back
+                </Text>
+              </TouchableOpacity>
+              <Text
+                style={[
+                  styles.modalTitle,
+                  styles.custodyModalTitle,
+                  { color: theme.text },
+                ]}
+              >
+                Custody Schedule
+              </Text>
+              <View style={styles.custodyHeaderSpacer} />
+            </View>
             <Text
               style={[
                 styles.custodySubtitle,
@@ -3427,6 +3526,29 @@ const styles = StyleSheet.create({
     padding: 24,
     width: "90%",
     maxHeight: "80%",
+  },
+  custodyModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  custodyBackButton: {
+    minWidth: 72,
+    paddingVertical: 8,
+    paddingRight: 8,
+  },
+  custodyBackButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  custodyModalTitle: {
+    flex: 1,
+    marginBottom: 0,
+    textAlign: "center",
+  },
+  custodyHeaderSpacer: {
+    width: 72,
   },
   custodySubtitle: {
     fontSize: 14,
