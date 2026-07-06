@@ -4,6 +4,6 @@
 
 module.exports = {
   version: "1.0.0",
-  iosBuildNumber: "9",
+  iosBuildNumber: "10",
   androidVersionCode: 2,
 };
