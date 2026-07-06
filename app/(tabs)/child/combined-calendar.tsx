@@ -317,16 +317,6 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
     });
   };
 
-  const showOnlyChildCalendar = (childId: string) => {
-    setHiddenChildIds(
-      new Set(
-        children
-          .filter((child) => child.id !== childId)
-          .map((child) => child.id),
-      ),
-    );
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.headerRow}>
@@ -453,14 +443,24 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
         ) : null}
       </View>
 
-      <View style={styles.legendRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.legendScroll}
+        contentContainerStyle={styles.legendRow}
+      >
         {children.map((child) => {
           const isVisible = !hiddenChildIds.has(child.id);
           const childColor = childColorMap[child.id]?.color || theme.primary;
 
           return (
-            <View
+            <TouchableOpacity
               key={child.id}
+              accessibilityRole="checkbox"
+              accessibilityLabel={`${child.name} calendar`}
+              accessibilityState={{ checked: isVisible }}
+              activeOpacity={0.7}
+              onPress={() => toggleChildCalendar(child.id)}
               style={[
                 styles.legendItem,
                 {
@@ -470,46 +470,22 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
                 },
               ]}
             >
-              <TouchableOpacity
-                accessibilityRole="checkbox"
-                accessibilityLabel={`${child.name} calendar`}
-                accessibilityState={{ checked: isVisible }}
-                activeOpacity={0.7}
-                onPress={() => toggleChildCalendar(child.id)}
-                style={styles.legendToggle}
+              <View style={[styles.legendColor, { backgroundColor: childColor }]} />
+              <Text
+                style={[
+                  styles.legendText,
+                  {
+                    color: theme.text,
+                    textDecorationLine: isVisible ? "none" : "line-through",
+                  },
+                ]}
               >
-                <View
-                  style={[styles.legendColor, { backgroundColor: childColor }]}
-                />
-                <Text
-                  style={[
-                    styles.legendText,
-                    {
-                      color: theme.text,
-                      textDecorationLine: isVisible ? "none" : "line-through",
-                    },
-                  ]}
-                >
-                  {child.name}
-                </Text>
-              </TouchableOpacity>
-              {children.length > 1 ? (
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel={`Only show ${child.name}'s calendar`}
-                  activeOpacity={0.7}
-                  onPress={() => showOnlyChildCalendar(child.id)}
-                  style={[styles.onlyButton, { borderColor: childColor }]}
-                >
-                  <Text style={[styles.onlyButtonText, { color: childColor }]}>
-                    Only
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
+                {child.name}
+              </Text>
+            </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
         {selectedDate.toDateString()}
@@ -685,11 +661,11 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   calendarFilterHeader: {
-    minHeight: 32,
+    minHeight: 26,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 6,
+    marginBottom: 2,
   },
   calendarFilterTitle: {
     fontSize: 13,
@@ -703,25 +679,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+  legendScroll: {
+    flexGrow: 0,
+    marginBottom: 8,
+  },
   legendRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
-    marginBottom: 12,
+    paddingRight: 16,
   },
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1.5,
     borderRadius: 18,
-    paddingLeft: 10,
-    paddingRight: 6,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    gap: 8,
-  },
-  legendToggle: {
-    flexDirection: "row",
-    alignItems: "center",
   },
   legendColor: {
     width: 10,
@@ -732,15 +705,6 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 12,
     fontWeight: "600",
-  },
-  onlyButton: {
-    borderLeftWidth: 1,
-    paddingLeft: 8,
-    paddingVertical: 2,
-  },
-  onlyButtonText: {
-    fontSize: 11,
-    fontWeight: "700",
   },
   sectionTitle: {
     fontSize: 16,
