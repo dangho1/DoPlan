@@ -1,3 +1,4 @@
+import { CHILD_COLOR_SWATCHES } from "@/constants/ChildColors";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -10,10 +11,17 @@ import {
     View,
 } from "react-native";
 import { supabase } from "@/lib/supabase";
+import type { DayTimeRange, WeekPattern } from "./calendar/types";
+import {
+  getDayOfWeekMondayIndex,
+  getWeekPatternForDate,
+  parseMinutes,
+} from "./calendar/utils";
 
 type ChildInfo = {
   id: string;
   name: string;
+  color: string | null;
 };
 
 type CalendarEventRow = {
@@ -45,20 +53,38 @@ type CombinedEvent = {
   isRecurring?: boolean;
 };
 
+type CustodyScheduleRow = {
+  id: string;
+  child_id: string;
+  days_of_week: number[];
+  color: string;
+  user_id: string;
+  day_time_ranges: Record<number, DayTimeRange>;
+  week_pattern: WeekPattern;
+};
+
+type GuardianInfo = {
+  id: string;
+  name: string;
+};
+
+type CustodyBarSegment = {
+  id: string;
+  userId: string;
+  leftPercent: number;
+  widthPercent: number;
+  color: string;
+  rowIndex: number;
+};
+
 interface CombinedCalendarProps {
   onBack: () => void;
 }
 
-const CHILD_COLORS = [
-  "#FF6B6B",
-  "#4ECDC4",
-  "#45B7D1",
-  "#FFA07A",
-  "#98D8C8",
-  "#F3A683",
-  "#786FA6",
-  "#F8B500",
-];
+// Fallback colors for a guardian who doesn't have a custody_schedules row
+// (and therefore no chosen color) yet. Kept distinct from CHILD_COLOR_SWATCHES
+// so a parent's custody bar never reads as "just another child color".
+const PARENT_FALLBACK_COLORS = ["#1D3557", "#E76F51", "#2A9D8F", "#6A4C93"];
 
 const monthNames = [
   "January",
@@ -77,9 +103,13 @@ const monthNames = [
 
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-const getDayOfWeekMondayIndex = (date: Date) => {
-  const jsDay = date.getDay();
-  return jsDay === 0 ? 6 : jsDay - 1;
+const isMissingWeekPatternColumnError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+  const maybeMessage = (error as { message?: string }).message || "";
+  return (
+    maybeMessage.includes("week_pattern") &&
+    maybeMessage.includes("schema cache")
+  );
 };
 
 const formatLocalDateKey = (date: Date) => {
@@ -123,17 +153,48 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
   const [recurringActivities, setRecurringActivities] = useState<
     RecurringActivityRow[]
   >([]);
+  const [custodySchedules, setCustodySchedules] = useState<
+    CustodyScheduleRow[]
+  >([]);
+  const [guardians, setGuardians] = useState<GuardianInfo[]>([]);
 
   const childColorMap = useMemo(() => {
     const map: Record<string, { color: string; name: string }> = {};
     children.forEach((child, index) => {
       map[child.id] = {
-        color: CHILD_COLORS[index % CHILD_COLORS.length],
+        color:
+          child.color ||
+          CHILD_COLOR_SWATCHES[index % CHILD_COLOR_SWATCHES.length],
         name: child.name,
       };
     });
     return map;
   }, [children]);
+
+  // Combined custody bar colors are keyed by guardian (user_id) rather than
+  // by individual custody_schedules row, so a guardian's color stays
+  // consistent across all of the current user's children even if their
+  // per-child custody rows were set up with different colors. We seed the
+  // color from whichever custody_schedules row we encounter first for that
+  // guardian, and fall back to a small fixed palette for guardians who don't
+  // have a custody schedule configured yet.
+  const guardianColorMap = useMemo(() => {
+    const map: Record<string, { color: string; name: string }> = {};
+    custodySchedules.forEach((schedule) => {
+      if (schedule.color && !map[schedule.user_id]) {
+        map[schedule.user_id] = { color: schedule.color, name: "" };
+      }
+    });
+    guardians.forEach((guardian, index) => {
+      map[guardian.id] = {
+        color:
+          map[guardian.id]?.color ||
+          PARENT_FALLBACK_COLORS[index % PARENT_FALLBACK_COLORS.length],
+        name: guardian.name,
+      };
+    });
+    return map;
+  }, [custodySchedules, guardians]);
 
   const loadData = useCallback(async () => {
     try {
@@ -147,6 +208,8 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
         setChildren([]);
         setEvents([]);
         setRecurringActivities([]);
+        setCustodySchedules([]);
+        setGuardians([]);
         return;
       }
 
@@ -157,7 +220,8 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
             child_id,
             children (
               id,
-              name
+              name,
+              color
             )
           `,
         )
@@ -168,6 +232,8 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
         setChildren([]);
         setEvents([]);
         setRecurringActivities([]);
+        setCustodySchedules([]);
+        setGuardians([]);
         return;
       }
 
@@ -196,6 +262,8 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
       if (dedupedChildren.length === 0) {
         setEvents([]);
         setRecurringActivities([]);
+        setCustodySchedules([]);
+        setGuardians([]);
         return;
       }
 
@@ -204,39 +272,152 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
       const firstDay = new Date(year, month, 1);
       const lastDay = new Date(year, month + 1, 0, 23, 59, 59);
 
-      const [eventsRes, recurringRes] = await Promise.all([
-        supabase
-          .from("calendar_events")
-          .select("id, child_id, activity_name, start_time, end_time")
-          .in("child_id", childIds)
-          .gte("start_time", firstDay.toISOString())
-          .lte("start_time", lastDay.toISOString()),
-        supabase
-          .from("recurring_activities")
-          .select(
-            "id, child_id, activity_name, days_of_week, start_time, end_time, color",
-          )
-          .in("child_id", childIds)
-          .eq("is_active", true),
-      ]);
+      const fetchEventsAndRecurring = async () => {
+        const [eventsRes, recurringRes] = await Promise.all([
+          supabase
+            .from("calendar_events")
+            .select("id, child_id, activity_name, start_time, end_time")
+            .in("child_id", childIds)
+            .gte("start_time", firstDay.toISOString())
+            .lte("start_time", lastDay.toISOString()),
+          supabase
+            .from("recurring_activities")
+            .select(
+              "id, child_id, activity_name, days_of_week, start_time, end_time, color",
+            )
+            .in("child_id", childIds)
+            .eq("is_active", true),
+        ]);
 
-      if (eventsRes.error) {
-        console.error("Error fetching combined events:", eventsRes.error);
-      }
-      if (recurringRes.error) {
-        console.error(
-          "Error fetching recurring activities:",
-          recurringRes.error,
+        if (eventsRes.error) {
+          console.error("Error fetching combined events:", eventsRes.error);
+        }
+        if (recurringRes.error) {
+          console.error(
+            "Error fetching recurring activities:",
+            recurringRes.error,
+          );
+        }
+
+        setEvents(
+          (eventsRes.data || []).filter(
+            (event): event is CalendarEventRow =>
+              event.child_id !== null && event.activity_name !== null,
+          ),
         );
-      }
+        setRecurringActivities(recurringRes.data || []);
+      };
 
-      setEvents(
-        (eventsRes.data || []).filter(
-          (event): event is CalendarEventRow =>
-            event.child_id !== null && event.activity_name !== null,
-        ),
-      );
-      setRecurringActivities(recurringRes.data || []);
+      // Fetch custody_schedules across ALL of the user's children (not a
+      // single child like calendar.tsx does) so the combined view can show
+      // one aggregated "who has responsibility today" bar, plus the list of
+      // guardians (parents) who have access to any of these children so we
+      // can label that bar with names.
+      const fetchCustodyAndGuardians = async () => {
+        let { data: custodyData, error: custodyError } = await supabase
+          .from("custody_schedules")
+          .select(
+            "id, child_id, days_of_week, color, user_id, day_time_ranges, week_pattern",
+          )
+          .in("child_id", childIds);
+
+        if (custodyError && isMissingWeekPatternColumnError(custodyError)) {
+          const fallback = await supabase
+            .from("custody_schedules")
+            .select(
+              "id, child_id, days_of_week, color, user_id, day_time_ranges",
+            )
+            .in("child_id", childIds);
+          custodyData = fallback.data as typeof custodyData;
+          custodyError = fallback.error;
+        }
+
+        if (custodyError) {
+          console.error(
+            "Error fetching custody schedules:",
+            custodyError,
+          );
+          setCustodySchedules([]);
+        } else {
+          setCustodySchedules(
+            (custodyData || []).map((schedule) => ({
+              ...schedule,
+              day_time_ranges:
+                schedule.day_time_ranges &&
+                typeof schedule.day_time_ranges === "object" &&
+                !Array.isArray(schedule.day_time_ranges)
+                  ? (schedule.day_time_ranges as unknown as Record<
+                      number,
+                      DayTimeRange
+                    >)
+                  : {},
+              week_pattern: (schedule.week_pattern === "odd" ||
+              schedule.week_pattern === "even"
+                ? schedule.week_pattern
+                : "all") as WeekPattern,
+            })),
+          );
+        }
+
+        const { data: userChildrenData, error: userChildrenError } =
+          await supabase
+            .from("user_children")
+            .select("user_id")
+            .in("child_id", childIds);
+
+        if (userChildrenError) {
+          console.error(
+            "Error fetching guardians for combined calendar:",
+            userChildrenError,
+          );
+          setGuardians([]);
+          return;
+        }
+
+        const guardianIds = Array.from(
+          new Set((userChildrenData || []).map((row) => row.user_id)),
+        );
+
+        if (guardianIds.length === 0) {
+          setGuardians([]);
+          return;
+        }
+
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("user_profiles")
+          .select("user_id, email, display_name, first_name, last_name")
+          .in("user_id", guardianIds);
+
+        if (profilesError) {
+          console.error("Error fetching guardian profiles:", profilesError);
+          setGuardians([]);
+          return;
+        }
+
+        setGuardians(
+          (profilesData || []).map((profile) => {
+            let name = "";
+            if (profile.display_name) {
+              name = profile.display_name;
+            } else if (profile.first_name && profile.last_name) {
+              name = `${profile.first_name} ${profile.last_name}`;
+            } else if (profile.email) {
+              name = profile.email;
+            } else {
+              name = "Guardian";
+            }
+            if (profile.user_id === user.id) {
+              name = `${name} (You)`;
+            }
+            return { id: profile.user_id, name };
+          }),
+        );
+      };
+
+      await Promise.all([
+        fetchEventsAndRecurring(),
+        fetchCustodyAndGuardians(),
+      ]);
     } finally {
       setLoading(false);
     }
@@ -301,8 +482,129 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
     return Array.from(eventChildren);
   };
 
+  // Aggregates custody_schedules across ALL of the user's children into one
+  // set of "who has responsibility" bar segments for a given day. Segments
+  // are grouped/deduped by guardian (user_id) rather than kept per-child, so
+  // if two children share the same guardian and time range on a given day
+  // (the common case) the combined view shows a single bar for that
+  // guardian instead of visually-redundant stacked duplicates. If different
+  // children have different guardians or time ranges on the same day, each
+  // distinct (guardian, time range) combination still renders as its own
+  // segment.
+  const getCustodyBarSegmentsForDate = (date: Date): CustodyBarSegment[] => {
+    const dayOfWeek = getDayOfWeekMondayIndex(date);
+    const weekPattern = getWeekPatternForDate(date);
+
+    const rawSegments: {
+      startMinutes: number;
+      endMinutes: number;
+      userId: string;
+    }[] = [];
+
+    custodySchedules.forEach((schedule) => {
+      if (!schedule.days_of_week.includes(dayOfWeek)) return;
+
+      const scheduleWeekPattern = schedule.week_pattern || "all";
+      if (
+        scheduleWeekPattern !== "all" &&
+        scheduleWeekPattern !== weekPattern
+      ) {
+        return;
+      }
+
+      const ranges = schedule.day_time_ranges || {};
+      const dayRange = ranges[dayOfWeek];
+
+      if (!dayRange?.start || !dayRange?.end) {
+        rawSegments.push({
+          startMinutes: 0,
+          endMinutes: 24 * 60,
+          userId: schedule.user_id,
+        });
+        return;
+      }
+
+      const startMinutes = parseMinutes(dayRange.start);
+      const endMinutes = parseMinutes(dayRange.end);
+
+      if (
+        startMinutes === null ||
+        endMinutes === null ||
+        startMinutes === endMinutes
+      ) {
+        rawSegments.push({
+          startMinutes: 0,
+          endMinutes: 24 * 60,
+          userId: schedule.user_id,
+        });
+        return;
+      }
+
+      if (endMinutes > startMinutes) {
+        rawSegments.push({ startMinutes, endMinutes, userId: schedule.user_id });
+        return;
+      }
+
+      // Overnight custody windows are split into two visible day segments.
+      rawSegments.push({
+        startMinutes: 0,
+        endMinutes,
+        userId: schedule.user_id,
+      });
+      rawSegments.push({
+        startMinutes,
+        endMinutes: 24 * 60,
+        userId: schedule.user_id,
+      });
+    });
+
+    const dedupedSegments = Array.from(
+      new Map(
+        rawSegments.map((segment) => [
+          `${segment.userId}-${segment.startMinutes}-${segment.endMinutes}`,
+          segment,
+        ]),
+      ).values(),
+    );
+
+    return dedupedSegments.map((segment, index) => {
+      const guardianMeta = guardianColorMap[segment.userId];
+      return {
+        id: `${segment.userId}-${segment.startMinutes}-${segment.endMinutes}-${index}`,
+        userId: segment.userId,
+        leftPercent: (segment.startMinutes / (24 * 60)) * 100,
+        widthPercent: Math.max(
+          1,
+          ((segment.endMinutes - segment.startMinutes) / (24 * 60)) * 100,
+        ),
+        color: guardianMeta?.color || theme.primary,
+        rowIndex: index,
+      };
+    });
+  };
+
+  const getGuardiansWithCustodyForDate = (date: Date) => {
+    const segments = getCustodyBarSegmentsForDate(date);
+    const seen = new Set<string>();
+    const result: { userId: string; name: string; color: string }[] = [];
+
+    segments.forEach((segment) => {
+      if (seen.has(segment.userId)) return;
+      seen.add(segment.userId);
+      const guardianMeta = guardianColorMap[segment.userId];
+      result.push({
+        userId: segment.userId,
+        name: guardianMeta?.name || "Guardian",
+        color: segment.color,
+      });
+    });
+
+    return result;
+  };
+
   const days = getDaysInMonthGrid(currentMonth);
   const selectedEvents = getCombinedEventsForDate(selectedDate);
+  const selectedCustodyGuardians = getGuardiansWithCustodyForDate(selectedDate);
   const visibleChildrenCount = children.length - hiddenChildIds.size;
 
   const toggleChildCalendar = (childId: string) => {
@@ -381,6 +683,7 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
             const selectedKey = formatLocalDateKey(selectedDate);
             const isSelected = selectedKey === dateKey;
             const childIds = getChildrenWithEventsOnDate(day);
+            const custodySegments = getCustodyBarSegmentsForDate(day);
 
             return (
               <View key={dateKey} style={styles.dayCell}>
@@ -396,6 +699,30 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
                   ]}
                   onPress={() => setSelectedDate(day)}
                 >
+                  {custodySegments.length > 0 ? (
+                    <View
+                      style={[
+                        styles.custodyBarContainer,
+                        { height: Math.min(custodySegments.length * 3, 9) },
+                      ]}
+                      pointerEvents="none"
+                    >
+                      {custodySegments.map((segment) => (
+                        <View
+                          key={segment.id}
+                          style={[
+                            styles.custodyBar,
+                            {
+                              backgroundColor: segment.color,
+                              left: `${segment.leftPercent}%`,
+                              top: (segment.rowIndex % 3) * 3,
+                              width: `${segment.widthPercent}%`,
+                            },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  ) : null}
                   <Text
                     style={[
                       styles.dayNumber,
@@ -487,9 +814,72 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
         })}
       </ScrollView>
 
+      {guardians.length > 0 ? (
+        <>
+          <Text style={[styles.calendarFilterTitle, { color: theme.text }]}>
+            Parents
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.legendScroll}
+            contentContainerStyle={styles.legendRow}
+          >
+            {guardians.map((guardian) => (
+              <View
+                key={guardian.id}
+                style={[
+                  styles.legendItem,
+                  {
+                    backgroundColor: theme.cardBackground,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.legendColor,
+                    {
+                      backgroundColor:
+                        guardianColorMap[guardian.id]?.color || theme.primary,
+                    },
+                  ]}
+                />
+                <Text style={[styles.legendText, { color: theme.text }]}>
+                  {guardian.name}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </>
+      ) : null}
+
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
         {selectedDate.toDateString()}
       </Text>
+
+      {selectedCustodyGuardians.length > 0 ? (
+        <View style={styles.custodySummaryWrap}>
+          {selectedCustodyGuardians.map((guardian) => (
+            <View key={guardian.userId} style={styles.custodySummaryRow}>
+              <View
+                style={[
+                  styles.custodySummaryDot,
+                  { backgroundColor: guardian.color },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.custodySummaryText,
+                  { color: theme.textSecondary },
+                ]}
+              >
+                Custody: {guardian.name}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -642,6 +1032,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingTop: 6,
+    overflow: "hidden",
+  },
+  custodyBarContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  custodyBar: {
+    position: "absolute",
+    top: 0,
+    height: 3,
+    borderRadius: 1.5,
   },
   dayNumber: {
     fontSize: 14,
@@ -710,6 +1113,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     marginBottom: 8,
+  },
+  custodySummaryWrap: {
+    marginBottom: 8,
+    gap: 4,
+  },
+  custodySummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  custodySummaryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  custodySummaryText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
   eventsScroll: {
     flex: 1,
