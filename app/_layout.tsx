@@ -7,6 +7,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Auth from "../components/Auth";
+import { isRecoveryUrl, parseAuthLink } from "../lib/authLinking";
 import { supabase } from "../lib/supabase";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
@@ -24,25 +25,40 @@ export default function RootLayout() {
   const [loading, setLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
-  const isRecoveryUrl = (url: string) => {
-    const normalized = url.toLowerCase();
-    return (
-      normalized.includes("type=recovery") ||
-      normalized.includes("password_recovery")
-    );
+  // Applies the recovery tokens from a deep link and flips into recovery mode.
+  // This is the ONLY path that works when the link is tapped while the app is
+  // already running (foreground or resumed from background) — Linking's
+  // getInitialURL() only reports the URL that originally launched the process,
+  // so a live 'url' event is the sole signal available in that case.
+  const handleAuthDeepLink = async (url: string) => {
+    if (!isRecoveryUrl(url)) return;
+
+    console.log("Password recovery URL detected in main layout");
+    const { accessToken, refreshToken } = parseAuthLink(url);
+
+    if (accessToken && refreshToken) {
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (error) {
+        console.error("Error applying recovery session:", error);
+      }
+    }
+
+    setIsPasswordRecovery(true);
   };
 
   useEffect(() => {
-    // Check for password recovery URL first
-    const checkPasswordRecovery = async () => {
-      const initialUrl = await Linking.getInitialURL();
-      if (initialUrl && isRecoveryUrl(initialUrl)) {
-        console.log("Password recovery URL detected in main layout");
-        setIsPasswordRecovery(true);
-      }
-    };
+    // Cold start: the link that launched the app.
+    Linking.getInitialURL().then((url) => {
+      if (url) handleAuthDeepLink(url);
+    });
 
-    checkPasswordRecovery();
+    // Warm start: the link was tapped while the app was already running.
+    const linkSubscription = Linking.addEventListener("url", ({ url }) => {
+      handleAuthDeepLink(url);
+    });
 
     let cancelled = false;
 
@@ -112,12 +128,14 @@ export default function RootLayout() {
 
       return () => {
         cancelled = true;
+        linkSubscription.remove();
         subscription?.subscription?.unsubscribe();
       };
     } catch (error) {
       console.error("Error setting up auth state change listener:", error);
       return () => {
         cancelled = true;
+        linkSubscription.remove();
       };
     }
   }, []);

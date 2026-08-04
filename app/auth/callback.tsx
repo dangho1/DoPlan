@@ -1,26 +1,26 @@
-import { useRouter } from "expo-router";
+import * as Linking from "expo-linking";
 import { useEffect } from "react";
-import {
-    ActivityIndicator,
-    Platform,
-    StyleSheet,
-    Text,
-    View,
-} from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from "react-native";
+import { parseAuthLink } from "../../lib/authLinking";
 import { supabase } from "../../lib/supabase";
 
 /**
- * This page handles the OAuth callback from Supabase password reset emails
- * It works on both web and mobile platforms
+ * Landing screen for the Supabase password-recovery deep link
+ * (doplan://auth/callback#access_token=...). The root layout
+ * (app/_layout.tsx) already listens for this same link globally and applies
+ * the recovery session as soon as it arrives, on both cold start and while
+ * the app is already running — once that happens it swaps this whole Stack
+ * out for the password-recovery UI, unmounting this screen.
+ *
+ * This screen does the same token exchange as a defensive fallback (e.g. if
+ * this route is reached without the root listener having fired yet) so it
+ * never dead-ends in a spinner.
  */
 export default function AuthCallback() {
-  const router = useRouter();
-
   useEffect(() => {
     const handleCallback = async () => {
       try {
         if (Platform.OS === "web") {
-          // On web, extract the hash fragment
           const hashParams = new URLSearchParams(
             window.location.hash.substring(1),
           );
@@ -28,43 +28,27 @@ export default function AuthCallback() {
           const refreshToken = hashParams.get("refresh_token");
           const type = hashParams.get("type");
 
-          console.log(
-            "Web callback - type:",
-            type,
-            "has tokens:",
-            !!accessToken,
-          );
-
           if (accessToken && refreshToken && type === "recovery") {
-            // Set the session with the tokens from the URL
             const { error } = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken,
             });
-
-            if (error) {
-              console.error("Error setting session:", error);
-            } else {
-              console.log("Session set successfully");
-              // The auth state change will automatically redirect to the new password screen
-              // via the main _layout.tsx
-            }
-          } else {
-            console.error("Missing tokens or not a recovery link");
+            if (error) console.error("Error setting session:", error);
           }
-        } else {
-          // On mobile web browser, try to open the native app using deep link
-          const appUrl = `doplan://auth/callback${window.location.hash}`;
-          console.log("Attempting to open app:", appUrl);
-          window.location.href = appUrl;
-
-          // Fallback message if app doesn't open
-          setTimeout(() => {
-            alert(
-              "Please open this link in your DivorceApp mobile application",
-            );
-          }, 2000);
+          return;
         }
+
+        const url = await Linking.getInitialURL();
+        if (!url) return;
+
+        const { accessToken, refreshToken } = parseAuthLink(url);
+        if (!accessToken || !refreshToken) return;
+
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (error) console.error("Error setting session:", error);
       } catch (error) {
         console.error("Callback error:", error);
       }
@@ -77,11 +61,6 @@ export default function AuthCallback() {
     <View style={styles.container}>
       <ActivityIndicator size="large" color="#007AFF" />
       <Text style={styles.text}>Processing password reset...</Text>
-      {Platform.OS !== "web" && (
-        <Text style={styles.subtext}>
-          If the app doesn't open automatically, please open it manually
-        </Text>
-      )}
     </View>
   );
 }
@@ -98,11 +77,5 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
     color: "#333",
-  },
-  subtext: {
-    marginTop: 10,
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
   },
 });
