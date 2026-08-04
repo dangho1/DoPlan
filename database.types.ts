@@ -92,6 +92,56 @@ export type Database = {
         };
         Relationships: [];
       };
+      custody_overrides: {
+        Row: {
+          assigned_label: string | null;
+          assigned_user_id: string | null;
+          child_id: string;
+          created_at: string;
+          created_by: string | null;
+          date: string;
+          end_time: string | null;
+          id: string;
+          note: string | null;
+          start_time: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          assigned_label?: string | null;
+          assigned_user_id?: string | null;
+          child_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          date: string;
+          end_time?: string | null;
+          id?: string;
+          note?: string | null;
+          start_time?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          assigned_label?: string | null;
+          assigned_user_id?: string | null;
+          child_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          date?: string;
+          end_time?: string | null;
+          id?: string;
+          note?: string | null;
+          start_time?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "custody_overrides_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       custody_schedule_change_requests: {
         Row: {
           child_id: string;
@@ -492,6 +542,7 @@ export type Database = {
           age: number;
           avatar_url: string | null;
           birth_date: string;
+          color: string | null;
           created_at: string | null;
           display_name: string;
           email: string;
@@ -510,6 +561,7 @@ export type Database = {
           age: number;
           avatar_url?: string | null;
           birth_date: string;
+          color?: string | null;
           created_at?: string | null;
           display_name: string;
           email: string;
@@ -528,6 +580,7 @@ export type Database = {
           age?: number;
           avatar_url?: string | null;
           birth_date?: string;
+          color?: string | null;
           created_at?: string | null;
           display_name?: string;
           email?: string;
