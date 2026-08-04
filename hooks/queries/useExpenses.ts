@@ -97,3 +97,22 @@ export function useDeleteExpense(childId: string | undefined) {
     },
   })
 }
+
+export function useUpdateChildCurrency(childId: string | undefined) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (currency: string) => {
+      const { error } = await supabase
+        .from('children')
+        .update({ currency })
+        .eq('id', childId!)
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['child', childId] })
+      queryClient.invalidateQueries({ queryKey: ['children'] })
+    },
+  })
+}

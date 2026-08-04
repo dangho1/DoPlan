@@ -72,6 +72,7 @@ export type Database = {
         Row: {
           avatar_url: string | null;
           created_at: string | null;
+          currency: string | null;
           date_of_birth: string | null;
           id: string;
           name: string;
@@ -79,6 +80,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null;
           created_at?: string | null;
+          currency?: string | null;
           date_of_birth?: string | null;
           id?: string;
           name: string;
@@ -86,6 +88,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null;
           created_at?: string | null;
+          currency?: string | null;
           date_of_birth?: string | null;
           id?: string;
           name?: string;

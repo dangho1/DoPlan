@@ -1,11 +1,13 @@
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useChild } from "@/hooks/queries/useChildren";
 import {
   useChildParents,
   useDeleteExpense,
   useExpenses,
   useSaveExpense,
+  useUpdateChildCurrency,
 } from "@/hooks/queries/useExpenses";
 import type { Expense } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,6 +34,25 @@ interface EconomicsProps {
   onBack?: () => void;
 }
 
+// DOP-42: short, Swedish-team-friendly currency list. SEK is first/default
+// since this is a Swedish team; the DB default (see supabase/children_currency.sql)
+// matches. A small local lookup keeps this dependency-free (no i18n library).
+const CURRENCY_OPTIONS = ["SEK", "USD", "EUR", "GBP", "NOK", "DKK"] as const;
+type CurrencyCode = (typeof CURRENCY_OPTIONS)[number];
+const DEFAULT_CURRENCY: CurrencyCode = "SEK";
+
+const CURRENCY_FORMAT: Record<CurrencyCode, { symbol: string; position: "prefix" | "suffix" }> = {
+  USD: { symbol: "$", position: "prefix" },
+  EUR: { symbol: "€", position: "prefix" },
+  GBP: { symbol: "£", position: "prefix" },
+  SEK: { symbol: "kr", position: "suffix" },
+  NOK: { symbol: "kr", position: "suffix" },
+  DKK: { symbol: "kr", position: "suffix" },
+};
+
+const isCurrencyCode = (value: string | null | undefined): value is CurrencyCode =>
+  !!value && (CURRENCY_OPTIONS as readonly string[]).includes(value);
+
 export default function Economics({ childName, childId, onBack }: EconomicsProps) {
   const router = useRouter();
   const params = useLocalSearchParams<{ childName?: string; childId?: string }>();
@@ -50,8 +71,14 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
 
   const { data: expenses = [], isLoading } = useExpenses(resolvedChildId);
   const { data: parents = [] } = useChildParents(resolvedChildId);
+  const { data: child } = useChild(resolvedChildId);
   const saveExpense = useSaveExpense(resolvedChildId);
   const deleteExpense = useDeleteExpense(resolvedChildId);
+  const updateChildCurrency = useUpdateChildCurrency(resolvedChildId);
+
+  const currency: CurrencyCode = isCurrencyCode(child?.currency)
+    ? child.currency
+    : DEFAULT_CURRENCY;
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -136,6 +163,13 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
     ]);
   };
 
+  const handleSelectCurrency = (code: CurrencyCode) => {
+    if (code === currency) return;
+    updateChildCurrency.mutate(code, {
+      onError: () => Alert.alert("Error", "Failed to update currency"),
+    });
+  };
+
   const getParentDisplayName = (parent: (typeof parents)[0]) => {
     if (parent.display_name) return parent.display_name;
     return `${parent.first_name} ${parent.last_name}`.trim() || parent.email;
@@ -199,7 +233,10 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
     return "Total";
   };
 
-  const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
+  const formatCurrency = (value: number) => {
+    const { symbol, position } = CURRENCY_FORMAT[currency];
+    return position === "prefix" ? `${symbol}${value.toFixed(2)}` : `${value.toFixed(2)} ${symbol}`;
+  };
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString();
 
   const renderExpenseItem = ({ item }: { item: Expense }) => (
@@ -326,6 +363,51 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
       </View>
 
       <View style={styles.content}>
+        <View
+          style={[
+            styles.summaryCard,
+            { backgroundColor: Colors[colorScheme ?? "light"].cardBackground },
+          ]}
+        >
+          <Text
+            style={[styles.summaryTitle, { color: Colors[colorScheme ?? "light"].text }]}
+          >
+            Currency
+          </Text>
+          <View style={styles.currencyContainer}>
+            {CURRENCY_OPTIONS.map((code) => (
+              <TouchableOpacity
+                key={code}
+                style={[
+                  styles.currencyButton,
+                  {
+                    backgroundColor:
+                      currency === code
+                        ? Colors[colorScheme ?? "light"].tint
+                        : Colors[colorScheme ?? "light"].inputBackground,
+                    borderColor: Colors[colorScheme ?? "light"].border,
+                  },
+                ]}
+                onPress={() => handleSelectCurrency(code)}
+              >
+                <Text
+                  style={[
+                    styles.currencyButtonText,
+                    {
+                      color:
+                        currency === code
+                          ? Colors[colorScheme ?? "light"].buttonText
+                          : Colors[colorScheme ?? "light"].text,
+                    },
+                  ]}
+                >
+                  {code}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         <View
           style={[
             styles.summaryCard,
@@ -514,7 +596,7 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
                   { color: Colors[colorScheme ?? "light"].textLight },
                 ]}
               >
-                Tap "Add New Expense" to get started
+                Tap &quot;Add New Expense&quot; to get started
               </Text>
             </View>
           }
@@ -892,6 +974,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   filterButtonText: { fontSize: 14, fontWeight: "600" },
+  currencyContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 4,
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  currencyButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 56,
+    alignItems: "center",
+  },
+  currencyButtonText: { fontSize: 13, fontWeight: "600" },
   addButton: {
     padding: 16,
     borderRadius: 12,

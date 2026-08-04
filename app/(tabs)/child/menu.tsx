@@ -29,6 +29,7 @@ export default function ChildMenuScreen() {
     date_of_birth: childDob,
     avatar_url: childAvatarUrl,
     created_at: "",
+    currency: null,
   };
   const child = currentChild ?? fallbackChild;
 
