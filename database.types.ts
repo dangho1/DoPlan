@@ -71,6 +71,7 @@ export type Database = {
       children: {
         Row: {
           avatar_url: string | null;
+          color: string | null;
           created_at: string | null;
           date_of_birth: string | null;
           id: string;
@@ -78,6 +79,7 @@ export type Database = {
         };
         Insert: {
           avatar_url?: string | null;
+          color?: string | null;
           created_at?: string | null;
           date_of_birth?: string | null;
           id?: string;
@@ -85,6 +87,7 @@ export type Database = {
         };
         Update: {
           avatar_url?: string | null;
+          color?: string | null;
           created_at?: string | null;
           date_of_birth?: string | null;
           id?: string;
