@@ -192,6 +192,7 @@ export type Database = {
           date: string;
           description: string;
           id: string;
+          paid: boolean | null;
           payer: string;
           updated_at: string | null;
           user_id: string;
@@ -203,6 +204,7 @@ export type Database = {
           date: string;
           description: string;
           id?: string;
+          paid?: boolean | null;
           payer: string;
           updated_at?: string | null;
           user_id: string;
@@ -214,6 +216,7 @@ export type Database = {
           date?: string;
           description?: string;
           id?: string;
+          paid?: boolean | null;
           payer?: string;
           updated_at?: string | null;
           user_id?: string;

@@ -7,6 +7,7 @@ import {
   useDeleteExpense,
   useExpenses,
   useSaveExpense,
+  useToggleExpensePaid,
   useUpdateChildCurrency,
 } from "@/hooks/queries/useExpenses";
 import type { Expense } from "@/lib/types";
@@ -113,6 +114,7 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
   const { data: child } = useChild(resolvedChildId);
   const saveExpense = useSaveExpense(resolvedChildId);
   const deleteExpense = useDeleteExpense(resolvedChildId);
+  const toggleExpensePaid = useToggleExpensePaid(resolvedChildId);
   const updateChildCurrency = useUpdateChildCurrency(resolvedChildId);
 
   const currency: CurrencyCode = isCurrencyCode(child?.currency)
@@ -125,6 +127,7 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "year" | "total">(
     "total",
   );
+  const [paidFilter, setPaidFilter] = useState<"all" | "paid" | "unpaid">("all");
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -195,11 +198,22 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
         style: "destructive",
         onPress: () => {
           deleteExpense.mutate(expenseId, {
+            onSuccess: () => {
+              setModalVisible(false);
+              resetForm();
+            },
             onError: () => Alert.alert("Error", "Failed to delete expense"),
           });
         },
       },
     ]);
+  };
+
+  const handleTogglePaid = (expense: Expense) => {
+    toggleExpensePaid.mutate(
+      { expenseId: expense.id, paid: !expense.paid },
+      { onError: () => Alert.alert("Error", "Failed to update paid status") },
+    );
   };
 
   const handleSelectCurrency = (code: CurrencyCode) => {
@@ -303,93 +317,125 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
     return { balances, fairShare };
   };
 
+  const getPaidFilteredExpenses = () => {
+    if (paidFilter === "paid") return expenses.filter((e) => !!e.paid);
+    if (paidFilter === "unpaid") return expenses.filter((e) => !e.paid);
+    return expenses;
+  };
+
   const formatCurrency = (value: number) => {
     const { symbol, position } = CURRENCY_FORMAT[currency];
     return position === "prefix" ? `${symbol}${value.toFixed(2)}` : `${value.toFixed(2)} ${symbol}`;
   };
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString();
 
-  const renderExpenseItem = ({ item }: { item: Expense }) => (
-    <View
-      style={[
-        styles.expenseItem,
-        { backgroundColor: Colors[colorScheme ?? "light"].cardBackground },
-      ]}
-    >
-      <View style={styles.expenseContent}>
-        <View style={styles.expenseHeader}>
-          <Text
-            style={[
-              styles.expenseDescription,
-              { color: Colors[colorScheme ?? "light"].text },
-            ]}
-          >
-            {item.description}
-          </Text>
-          <Text
-            style={[
-              styles.expenseAmount,
-              { color: Colors[colorScheme ?? "light"].tint },
-            ]}
-          >
-            {formatCurrency(item.amount)}
-          </Text>
+  const renderExpenseItem = ({ item }: { item: Expense }) => {
+    const isPaid = !!item.paid;
+
+    return (
+      <View
+        style={[
+          styles.expenseItem,
+          {
+            backgroundColor: Colors[colorScheme ?? "light"].cardBackground,
+            opacity: isPaid ? 0.7 : 1,
+          },
+        ]}
+      >
+        <View style={styles.expenseContent}>
+          <View style={styles.expenseHeader}>
+            <Text
+              style={[
+                styles.expenseDescription,
+                { color: Colors[colorScheme ?? "light"].text },
+                isPaid && styles.expenseDescriptionPaid,
+              ]}
+            >
+              {item.description}
+            </Text>
+            <Text
+              style={[
+                styles.expenseAmount,
+                { color: Colors[colorScheme ?? "light"].tint },
+              ]}
+            >
+              {formatCurrency(item.amount)}
+            </Text>
+          </View>
+          <View style={styles.expenseDetails}>
+            <Text
+              style={[
+                styles.expenseDate,
+                { color: Colors[colorScheme ?? "light"].textSecondary },
+              ]}
+            >
+              {formatDate(item.date)}
+            </Text>
+            <Text
+              style={[
+                styles.expensePayer,
+                { color: Colors[colorScheme ?? "light"].textSecondary },
+              ]}
+            >
+              Paid by: {item.payer}
+            </Text>
+          </View>
+          {isPaid && (
+            <View style={styles.paidBadge}>
+              <Ionicons name="checkmark-circle" size={14} color={Colors[colorScheme ?? "light"].tint} />
+              <Text style={[styles.paidBadgeText, { color: Colors[colorScheme ?? "light"].tint }]}>
+                Paid
+              </Text>
+            </View>
+          )}
         </View>
-        <View style={styles.expenseDetails}>
-          <Text
+        <View style={styles.expenseActions}>
+          <TouchableOpacity
+            onPress={() => openEditModal(item)}
             style={[
-              styles.expenseDate,
-              { color: Colors[colorScheme ?? "light"].textSecondary },
+              styles.actionButton,
+              { backgroundColor: Colors[colorScheme ?? "light"].tint },
             ]}
           >
-            {formatDate(item.date)}
-          </Text>
-          <Text
+            <Text
+              style={[
+                styles.actionButtonText,
+                { color: Colors[colorScheme ?? "light"].buttonText },
+              ]}
+            >
+              Edit
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleTogglePaid(item)}
             style={[
-              styles.expensePayer,
-              { color: Colors[colorScheme ?? "light"].textSecondary },
+              styles.actionButton,
+              isPaid
+                ? { backgroundColor: Colors[colorScheme ?? "light"].tint }
+                : {
+                    backgroundColor: Colors[colorScheme ?? "light"].inputBackground,
+                    borderWidth: 1,
+                    borderColor: Colors[colorScheme ?? "light"].border,
+                  },
             ]}
           >
-            Paid by: {item.payer}
-          </Text>
+            <Text
+              style={[
+                styles.actionButtonText,
+                {
+                  color: isPaid
+                    ? Colors[colorScheme ?? "light"].buttonText
+                    : Colors[colorScheme ?? "light"].text,
+                },
+              ]}
+            >
+              {isPaid ? "Paid ✓" : "Mark paid"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
-      <View style={styles.expenseActions}>
-        <TouchableOpacity
-          onPress={() => openEditModal(item)}
-          style={[
-            styles.actionButton,
-            { backgroundColor: Colors[colorScheme ?? "light"].tint },
-          ]}
-        >
-          <Text
-            style={[
-              styles.actionButtonText,
-              { color: Colors[colorScheme ?? "light"].buttonText },
-            ]}
-          >
-            Edit
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => handleDelete(item.id)}
-          style={[
-            styles.actionButton,
-            { backgroundColor: Colors[colorScheme ?? "light"].accent },
-          ]}
-        >
-          <Text
-            style={[
-              styles.actionButtonText,
-              { color: Colors[colorScheme ?? "light"].buttonText },
-            ]}
-          >
-            Delete
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   if (isLoading) {
     return (
@@ -739,8 +785,41 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
           </Text>
         </TouchableOpacity>
 
+        <View style={styles.paidFilterContainer}>
+          {(["all", "paid", "unpaid"] as const).map((f) => (
+            <TouchableOpacity
+              key={f}
+              style={[
+                styles.paidFilterButton,
+                {
+                  backgroundColor:
+                    paidFilter === f
+                      ? Colors[colorScheme ?? "light"].tint
+                      : Colors[colorScheme ?? "light"].inputBackground,
+                  borderColor: Colors[colorScheme ?? "light"].border,
+                },
+              ]}
+              onPress={() => setPaidFilter(f)}
+            >
+              <Text
+                style={[
+                  styles.paidFilterButtonText,
+                  {
+                    color:
+                      paidFilter === f
+                        ? Colors[colorScheme ?? "light"].buttonText
+                        : Colors[colorScheme ?? "light"].text,
+                  },
+                ]}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <FlatList
-          data={expenses}
+          data={getPaidFilteredExpenses()}
           renderItem={renderExpenseItem}
           keyExtractor={(item) => item.id}
           style={styles.expensesList}
@@ -754,7 +833,9 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
                   { color: Colors[colorScheme ?? "light"].textSecondary },
                 ]}
               >
-                No expenses yet
+                {expenses.length === 0
+                  ? "No expenses yet"
+                  : `No ${paidFilter} expenses`}
               </Text>
               <Text
                 style={[
@@ -762,7 +843,9 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
                   { color: Colors[colorScheme ?? "light"].textLight },
                 ]}
               >
-                Tap &quot;Add New Expense&quot; to get started
+                {expenses.length === 0
+                  ? 'Tap "Add New Expense" to get started'
+                  : "Try a different filter above"}
               </Text>
             </View>
           }
@@ -1025,6 +1108,23 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {editingExpense && (
+                <TouchableOpacity
+                  onPress={() => handleDelete(editingExpense.id)}
+                  disabled={deleteExpense.isPending}
+                  style={styles.deleteExpenseButton}
+                >
+                  <Text
+                    style={[
+                      styles.deleteExpenseButtonText,
+                      { color: Colors[colorScheme ?? "light"].accent },
+                    ]}
+                  >
+                    {deleteExpense.isPending ? "Deleting..." : "Delete Expense"}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
             {Platform.OS === "ios" && (
               <>
@@ -1177,6 +1277,20 @@ const styles = StyleSheet.create({
   balanceRowText: { fontSize: 14, flex: 1 },
   balanceRowName: { fontWeight: "700" },
   balanceRowAmount: { fontSize: 16, fontWeight: "bold", marginLeft: 12 },
+  paidFilterContainer: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  paidFilterButton: {
+    flex: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  paidFilterButtonText: { fontSize: 14, fontWeight: "600" },
   addButton: {
     padding: 16,
     borderRadius: 12,
@@ -1209,10 +1323,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   expenseDescription: { fontSize: 16, fontWeight: "600", flex: 1, marginRight: 12 },
+  expenseDescriptionPaid: { textDecorationLine: "line-through" },
   expenseAmount: { fontSize: 16, fontWeight: "bold" },
   expenseDetails: { flexDirection: "row", justifyContent: "space-between" },
   expenseDate: { fontSize: 14 },
   expensePayer: { fontSize: 14 },
+  paidBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+  },
+  paidBadgeText: { fontSize: 12, fontWeight: "700" },
   expenseActions: { flexDirection: "column", gap: 8, marginLeft: 12 },
   actionButton: {
     paddingHorizontal: 12,
@@ -1286,6 +1408,12 @@ const styles = StyleSheet.create({
   cancelButton: {},
   saveButton: {},
   modalButtonText: { fontSize: 16, fontWeight: "600" },
+  deleteExpenseButton: {
+    alignItems: "center",
+    marginTop: 16,
+    padding: 12,
+  },
+  deleteExpenseButtonText: { fontSize: 14, fontWeight: "600" },
   keyboardAccessory: {
     borderTopWidth: 1,
     paddingHorizontal: 12,

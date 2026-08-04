@@ -98,6 +98,20 @@ export function useDeleteExpense(childId: string | undefined) {
   })
 }
 
+export function useToggleExpensePaid(childId: string | undefined) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ expenseId, paid }: { expenseId: string; paid: boolean }) => {
+      const { error } = await supabase.from('expenses').update({ paid }).eq('id', expenseId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses', childId] })
+    },
+  })
+}
+
 export function useUpdateChildCurrency(childId: string | undefined) {
   const queryClient = useQueryClient()
 
