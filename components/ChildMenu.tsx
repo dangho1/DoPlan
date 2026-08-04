@@ -3,7 +3,15 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import type { Child } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import NextEventCard from "./NextEventCard";
 
 interface MenuOption {
   id: string;
@@ -88,72 +96,107 @@ export default function ChildMenu({
         </TouchableOpacity>
       </View>
 
-      {/* Child profile section */}
-      <TouchableOpacity
-        style={styles.profileSection}
-        onPress={onEdit}
-        accessibilityRole="button"
-        accessibilityLabel={`Edit ${child.name}'s name and picture`}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Child's picture with fixed size and cropping */}
-        <View style={styles.profileImageContainer}>
-          <Image
-            source={
-              child.avatar_url
-                ? { uri: child.avatar_url }
-                : require("../assets/images/child_placeholder.png")
-            }
-            style={styles.profileImage}
-            resizeMode="cover"
-          />
-          <View
-            style={[
-              styles.profileEditBadge,
-              { backgroundColor: Colors[colorScheme ?? "light"].primary },
-            ]}
-          >
-            <Ionicons name="camera" size={16} color="#fff" />
+        {/* Child profile section */}
+        <TouchableOpacity
+          style={styles.profileSection}
+          onPress={onEdit}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${child.name}'s name and picture`}
+        >
+          {/* Child's picture with fixed size and cropping */}
+          <View style={styles.profileImageContainer}>
+            <Image
+              source={
+                child.avatar_url
+                  ? { uri: child.avatar_url }
+                  : require("../assets/images/child_placeholder.png")
+              }
+              style={styles.profileImage}
+              resizeMode="cover"
+            />
+            <View
+              style={[
+                styles.profileEditBadge,
+                { backgroundColor: Colors[colorScheme ?? "light"].primary },
+              ]}
+            >
+              <Ionicons name="camera" size={16} color="#fff" />
+            </View>
           </View>
-        </View>
 
-        <View style={styles.childNameRow}>
-          <Text
-            style={[
-              styles.childName,
-              { color: Colors[colorScheme ?? "light"].text },
-            ]}
-          >
-            {child.name}
-          </Text>
-          <Ionicons
-            name="pencil"
-            size={18}
-            color={Colors[colorScheme ?? "light"].tint}
-          />
-        </View>
+          <View style={styles.childNameRow}>
+            <Text
+              style={[
+                styles.childName,
+                { color: Colors[colorScheme ?? "light"].text },
+              ]}
+            >
+              {child.name}
+            </Text>
+            <Ionicons
+              name="pencil"
+              size={18}
+              color={Colors[colorScheme ?? "light"].tint}
+            />
+          </View>
 
-        {child.date_of_birth && (
-          <Text
-            style={[
-              styles.childAge,
-              { color: Colors[colorScheme ?? "light"].text },
-            ]}
-          >
-            {calculateAge(child.date_of_birth)}
-          </Text>
-        )}
-      </TouchableOpacity>
+          {child.date_of_birth && (
+            <Text
+              style={[
+                styles.childAge,
+                { color: Colors[colorScheme ?? "light"].text },
+              ]}
+            >
+              {calculateAge(child.date_of_birth)}
+            </Text>
+          )}
+        </TouchableOpacity>
 
-      {/* Menu options grid */}
-      <View style={styles.menuGrid}>
-        {menuOptions.map((option) => (
+        {/* Next upcoming event, clearly marked when it isn't today */}
+        <NextEventCard childId={child.id} onPress={onCalendar} />
+
+        {/* Menu options grid */}
+        <View style={styles.menuGrid}>
+          {menuOptions.map((option) => (
+            <TouchableOpacity
+              key={option.id}
+              style={[
+                styles.menuButton,
+                { backgroundColor: Colors[colorScheme ?? "light"].background },
+              ]}
+              onPress={option.onPress}
+            >
+              <View
+                style={[
+                  styles.menuButtonContent,
+                  { borderColor: Colors[colorScheme ?? "light"].tint },
+                ]}
+              >
+                <Text style={styles.menuIcon}>{option.icon}</Text>
+                <Text
+                  style={[
+                    styles.menuTitle,
+                    { color: Colors[colorScheme ?? "light"].text },
+                  ]}
+                >
+                  {option.title}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+
+          {/* Active menu buttons for additional features */}
           <TouchableOpacity
-            key={option.id}
             style={[
               styles.menuButton,
               { backgroundColor: Colors[colorScheme ?? "light"].background },
             ]}
-            onPress={option.onPress}
+            onPress={onActivities}
           >
             <View
               style={[
@@ -161,70 +204,44 @@ export default function ChildMenu({
                 { borderColor: Colors[colorScheme ?? "light"].tint },
               ]}
             >
-              <Text style={styles.menuIcon}>{option.icon}</Text>
+              <Text style={styles.menuIcon}>🎨</Text>
               <Text
                 style={[
                   styles.menuTitle,
                   { color: Colors[colorScheme ?? "light"].text },
                 ]}
               >
-                {option.title}
+                Recurring Activities
               </Text>
             </View>
           </TouchableOpacity>
-        ))}
 
-        {/* Active menu buttons for additional features */}
-        <TouchableOpacity
-          style={[
-            styles.menuButton,
-            { backgroundColor: Colors[colorScheme ?? "light"].background },
-          ]}
-          onPress={onActivities}
-        >
-          <View
+          <TouchableOpacity
             style={[
-              styles.menuButtonContent,
-              { borderColor: Colors[colorScheme ?? "light"].tint },
+              styles.menuButton,
+              { backgroundColor: Colors[colorScheme ?? "light"].background },
             ]}
+            onPress={onSettings}
           >
-            <Text style={styles.menuIcon}>🎨</Text>
-            <Text
+            <View
               style={[
-                styles.menuTitle,
-                { color: Colors[colorScheme ?? "light"].text },
+                styles.menuButtonContent,
+                { borderColor: Colors[colorScheme ?? "light"].tint },
               ]}
             >
-              Recurring Activities
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.menuButton,
-            { backgroundColor: Colors[colorScheme ?? "light"].background },
-          ]}
-          onPress={onSettings}
-        >
-          <View
-            style={[
-              styles.menuButtonContent,
-              { borderColor: Colors[colorScheme ?? "light"].tint },
-            ]}
-          >
-            <Text style={styles.menuIcon}>⚙️</Text>
-            <Text
-              style={[
-                styles.menuTitle,
-                { color: Colors[colorScheme ?? "light"].text },
-              ]}
-            >
-              Settings
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+              <Text style={styles.menuIcon}>⚙️</Text>
+              <Text
+                style={[
+                  styles.menuTitle,
+                  { color: Colors[colorScheme ?? "light"].text },
+                ]}
+              >
+                Settings
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -246,6 +263,12 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
   profileSection: {
     alignItems: "center",
@@ -290,7 +313,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   menuGrid: {
-    flex: 1,
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-around",
