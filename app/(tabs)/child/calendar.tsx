@@ -31,11 +31,19 @@ import {
   rescheduleEventAlertFromPreference,
   scheduleEventAlert,
 } from "@/lib/eventNotifications";
+import {
+  CUSTODY_OVERRIDE_NO_ONE_COLOR,
+  CUSTODY_OVERRIDE_THIRD_PARTY_COLOR,
+  PARENT_COLOR_FALLBACKS,
+} from "@/constants/ParentColors";
 import { supabase } from "@/lib/supabase";
 import { DayTimeline } from "./calendar/DayTimeline";
 import type {
   CalendarEvent,
   CustodyDraft,
+  CustodyOverride,
+  CustodyOverrideAssignment,
+  CustodyOverrideDraft,
   CustodySchedule,
   CustodyScheduleChangeRequest,
   CustodyTemplate,
@@ -59,6 +67,20 @@ const TIME_WHEEL_ITEM_HEIGHT = 44;
 const TIME_WHEEL_VISIBLE_ITEMS = 5;
 const TIME_WHEEL_VERTICAL_PADDING =
   (TIME_WHEEL_ITEM_HEIGHT * (TIME_WHEEL_VISIBLE_ITEMS - 1)) / 2;
+
+const MINUTES_PER_DAY = 24 * 60;
+const CUSTODY_BAR_ROW_HEIGHT = 4;
+const CUSTODY_BAR_MAX_ROWS = 4;
+
+const EMPTY_OVERRIDE_DRAFT: CustodyOverrideDraft = {
+  assignment: "parent",
+  parentId: null,
+  label: "",
+  allDay: true,
+  startTime: "09:00",
+  endTime: "17:00",
+  note: "",
+};
 
 const formatTimeUnit = (value: number) => value.toString().padStart(2, "0");
 
@@ -242,6 +264,8 @@ export default function Calendar({
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [newEventName, setNewEventName] = useState("");
+  const [newEventLocation, setNewEventLocation] = useState("");
+  const [newEventNotes, setNewEventNotes] = useState("");
   const [newEventAllDay, setNewEventAllDay] = useState(false);
   const [newEventRepeat, setNewEventRepeat] = useState<"none" | "weekly">(
     "none",
@@ -268,6 +292,21 @@ export default function Calendar({
   const [custodyChangeRequests, setCustodyChangeRequests] = useState<
     CustodyScheduleChangeRequest[]
   >([]);
+  const [custodyOverrides, setCustodyOverrides] = useState<CustodyOverride[]>(
+    [],
+  );
+  const [custodyOverridesUnavailable, setCustodyOverridesUnavailable] =
+    useState(false);
+  const [overrideModalVisible, setOverrideModalVisible] = useState(false);
+  const [overrideDraft, setOverrideDraft] = useState<CustodyOverrideDraft>(
+    EMPTY_OVERRIDE_DRAFT,
+  );
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [custodyTimeEditor, setCustodyTimeEditor] = useState<{
+    parentId: string;
+    dayIndex: number;
+    field: "start" | "end";
+  } | null>(null);
 
   const dayContentTranslateX = useRef(new Animated.Value(0)).current;
   const transitionContentTranslateX = useRef(new Animated.Value(0)).current;
@@ -317,6 +356,7 @@ export default function Calendar({
     await Promise.all([
       fetchEvents(),
       fetchCustodySchedules(),
+      fetchCustodyOverrides(),
       fetchRecurringActivities(),
       fetchParents(),
       fetchCustodyChangeRequests(),
@@ -329,6 +369,23 @@ export default function Calendar({
     const maybeMessage = (error as { message?: string }).message || "";
     return (
       maybeMessage.includes("week_pattern") &&
+      maybeMessage.includes("schema cache")
+    );
+  };
+
+  const isMissingProfileColorColumnError = (error: unknown) => {
+    if (!error || typeof error !== "object") return false;
+    const maybeMessage = (error as { message?: string }).message || "";
+    return (
+      maybeMessage.includes("color") && maybeMessage.includes("schema cache")
+    );
+  };
+
+  const isMissingCustodyOverridesTableError = (error: unknown) => {
+    if (!error || typeof error !== "object") return false;
+    const maybeMessage = (error as { message?: string }).message || "";
+    return (
+      maybeMessage.includes("custody_overrides") ||
       maybeMessage.includes("schema cache")
     );
   };
@@ -373,35 +430,34 @@ export default function Calendar({
       // Get the user IDs
       const userIds = userChildrenData.map((uc) => uc.user_id);
 
-      // Fetch user profiles for those user IDs
-      const { data: profilesData, error: profilesError } = await supabase
+      // Fetch user profiles for those user IDs. `color` is the guardian's own
+      // personal calendar colour and is only present once
+      // supabase/user_profiles_color.sql has been applied, so fall back to a
+      // query without it when the column is missing.
+      let { data: profilesData, error: profilesError } = await supabase
         .from("user_profiles")
-        .select("user_id, email, display_name, first_name, last_name")
+        .select("user_id, email, display_name, first_name, last_name, color")
         .in("user_id", userIds);
+
+      if (profilesError && isMissingProfileColorColumnError(profilesError)) {
+        const fallback = await supabase
+          .from("user_profiles")
+          .select("user_id, email, display_name, first_name, last_name")
+          .in("user_id", userIds);
+        profilesData = fallback.data as typeof profilesData;
+        profilesError = fallback.error;
+      }
 
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
         return;
       }
 
-      console.log("Found profiles:", profilesData);
-
       // Get current user to add "(You)" indicator
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      // Create parent list with colors
-      const colors = [
-        "#FF6B6B",
-        "#4ECDC4",
-        "#45B7D1",
-        "#FFA07A",
-        "#98D8C8",
-        "#F3A683",
-        "#786FA6",
-        "#F8B500",
-      ];
       const parentList = (profilesData || []).map(
         (profile: any, index: number) => {
           // Get name from profile - prefer display_name
@@ -421,10 +477,19 @@ export default function Calendar({
             name = `${name} (You)`;
           }
 
+          // A guardian's own colour wins over the positional fallback palette,
+          // so two similar-looking parents can be told apart on the calendar.
+          const personalColor =
+            typeof profile.color === "string" && profile.color.trim()
+              ? profile.color.trim()
+              : null;
+
           return {
             id: profile.user_id,
             name: name,
-            color: colors[index % colors.length],
+            color:
+              personalColor ??
+              PARENT_COLOR_FALLBACKS[index % PARENT_COLOR_FALLBACKS.length],
           };
         },
       );
@@ -505,6 +570,41 @@ export default function Calendar({
       setCustodySchedules(schedulesWithNames);
     } catch (error) {
       console.error("Error fetching custody schedules:", error);
+    }
+  };
+
+  const fetchCustodyOverrides = async () => {
+    try {
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      // The month grid renders up to six weeks, so pull a week of slack on
+      // either side to cover the leading/trailing days and day-view swiping.
+      const rangeStart = new Date(year, month, 1 - 7);
+      const rangeEnd = new Date(year, month + 1, 7);
+
+      const { data, error } = await supabase
+        .from("custody_overrides")
+        .select(
+          "id, child_id, date, assigned_user_id, assigned_label, start_time, end_time, note",
+        )
+        .eq("child_id", resolvedChildId)
+        .gte("date", formatLocalDateKey(rangeStart))
+        .lte("date", formatLocalDateKey(rangeEnd));
+
+      if (error) {
+        if (isMissingCustodyOverridesTableError(error)) {
+          setCustodyOverrides([]);
+          setCustodyOverridesUnavailable(true);
+          return;
+        }
+        console.error("Error fetching custody overrides:", error);
+        return;
+      }
+
+      setCustodyOverridesUnavailable(false);
+      setCustodyOverrides((data || []) as CustodyOverride[]);
+    } catch (error) {
+      console.error("Error fetching custody overrides:", error);
     }
   };
 
@@ -598,79 +698,177 @@ export default function Calendar({
     return [...regularEvents, ...recurringEvents];
   };
 
-  const getCustodyBarSegmentsForDate = (date: Date) => {
+  const getParentColorForUser = (userId: string | null) =>
+    userId ? parents.find((parent) => parent.id === userId)?.color : undefined;
+
+  const getParentNameForUser = (userId: string | null) =>
+    (userId ? parents.find((parent) => parent.id === userId)?.name : undefined) ??
+    "Guardian";
+
+  const getCustodyOverrideForDate = (date: Date | null) => {
+    if (!date) return null;
+    const dateKey = formatLocalDateKey(date);
+    return (
+      custodyOverrides.find((override) => override.date === dateKey) ?? null
+    );
+  };
+
+  const getCustodyOverrideColor = (override: CustodyOverride) => {
+    if (override.assigned_user_id) {
+      return (
+        getParentColorForUser(override.assigned_user_id) ??
+        custodySchedules.find((s) => s.user_id === override.assigned_user_id)
+          ?.color ??
+        theme.tint
+      );
+    }
+    if (override.assigned_label?.trim()) {
+      return CUSTODY_OVERRIDE_THIRD_PARTY_COLOR;
+    }
+    return CUSTODY_OVERRIDE_NO_ONE_COLOR;
+  };
+
+  const getCustodyOverrideAssigneeLabel = (override: CustodyOverride) => {
+    if (override.assigned_user_id) {
+      return getParentNameForUser(override.assigned_user_id);
+    }
+    const label = override.assigned_label?.trim();
+    if (label) return label;
+    return "No one has responsibility";
+  };
+
+  const formatCustodyOverrideWindow = (override: CustodyOverride) =>
+    override.start_time && override.end_time
+      ? `${override.start_time} – ${override.end_time}`
+      : "All day";
+
+  type CustodyRange = {
+    startMinutes: number;
+    endMinutes: number;
+    color: string;
+    isOverride: boolean;
+  };
+
+  // Turns an optional HH:MM window into the day segments it occupies. A missing
+  // or empty window covers the whole day; an overnight window is split in two.
+  const buildCustodyRanges = (
+    startMinutes: number | null,
+    endMinutes: number | null,
+    color: string,
+    isOverride: boolean,
+  ): CustodyRange[] => {
+    if (
+      startMinutes === null ||
+      endMinutes === null ||
+      startMinutes === endMinutes
+    ) {
+      return [
+        { startMinutes: 0, endMinutes: MINUTES_PER_DAY, color, isOverride },
+      ];
+    }
+
+    if (endMinutes > startMinutes) {
+      return [{ startMinutes, endMinutes, color, isOverride }];
+    }
+
+    return [
+      { startMinutes: 0, endMinutes, color, isOverride },
+      { startMinutes, endMinutes: MINUTES_PER_DAY, color, isOverride },
+    ];
+  };
+
+  // Removes `cut` from every range, keeping the parts that fall outside it.
+  const subtractCustodyRange = (
+    ranges: CustodyRange[],
+    cut: { startMinutes: number; endMinutes: number },
+  ): CustodyRange[] =>
+    ranges.flatMap((range) => {
+      const overlapStart = Math.max(range.startMinutes, cut.startMinutes);
+      const overlapEnd = Math.min(range.endMinutes, cut.endMinutes);
+      if (overlapStart >= overlapEnd) return [range];
+
+      const remainder: CustodyRange[] = [];
+      if (range.startMinutes < overlapStart) {
+        remainder.push({ ...range, endMinutes: overlapStart });
+      }
+      if (overlapEnd < range.endMinutes) {
+        remainder.push({ ...range, startMinutes: overlapEnd });
+      }
+      return remainder;
+    });
+
+  const getRecurringCustodySchedulesForDate = (date: Date) => {
     const dayOfWeek = getDayOfWeekMondayIndex(date);
     const weekPattern = getWeekPatternForDate(date);
 
-    const segments: Array<{
-      startMinutes: number;
-      endMinutes: number;
-      color: string;
-    }> = [];
-
-    custodySchedules.forEach((schedule) => {
-      if (!schedule.days_of_week.includes(dayOfWeek)) return;
-
+    return custodySchedules.filter((schedule) => {
+      if (!schedule.days_of_week.includes(dayOfWeek)) return false;
       const scheduleWeekPattern = schedule.week_pattern || "all";
-      if (
-        scheduleWeekPattern !== "all" &&
-        scheduleWeekPattern !== weekPattern
-      ) {
-        return;
-      }
-
-      const ranges = schedule.day_time_ranges || {};
-      const dayRange = ranges[dayOfWeek];
-      if (!dayRange?.start || !dayRange?.end) {
-        segments.push({
-          startMinutes: 0,
-          endMinutes: 24 * 60,
-          color: schedule.color,
-        });
-        return;
-      }
-
-      const startMinutes = parseMinutes(dayRange.start);
-      const endMinutes = parseMinutes(dayRange.end);
-
-      if (
-        startMinutes === null ||
-        endMinutes === null ||
-        startMinutes === endMinutes
-      ) {
-        segments.push({
-          startMinutes: 0,
-          endMinutes: 24 * 60,
-          color: schedule.color,
-        });
-        return;
-      }
-
-      if (endMinutes > startMinutes) {
-        segments.push({ startMinutes, endMinutes, color: schedule.color });
-        return;
-      }
-
-      // Overnight custody windows are split into two visible day segments.
-      segments.push({ startMinutes: 0, endMinutes, color: schedule.color });
-      segments.push({
-        startMinutes,
-        endMinutes: 24 * 60,
-        color: schedule.color,
-      });
+      return (
+        scheduleWeekPattern === "all" || scheduleWeekPattern === weekPattern
+      );
     });
+  };
 
-    return segments.map((segment, index) => ({
+  const getCustodyRangesForDate = (date: Date): CustodyRange[] => {
+    const dayOfWeek = getDayOfWeekMondayIndex(date);
+
+    const recurringRanges = getRecurringCustodySchedulesForDate(date).flatMap(
+      (schedule) => {
+        const dayRange = (schedule.day_time_ranges || {})[dayOfWeek];
+        // The guardian's own colour wins so a colour change takes effect
+        // immediately, even before the schedule row is rewritten.
+        const color = getParentColorForUser(schedule.user_id) ?? schedule.color;
+
+        return buildCustodyRanges(
+          dayRange?.start ? parseMinutes(dayRange.start) : null,
+          dayRange?.end ? parseMinutes(dayRange.end) : null,
+          color,
+          false,
+        );
+      },
+    );
+
+    const override = getCustodyOverrideForDate(date);
+    if (!override) return recurringRanges;
+
+    const overrideRanges = buildCustodyRanges(
+      override.start_time ? parseMinutes(override.start_time) : null,
+      override.end_time ? parseMinutes(override.end_time) : null,
+      getCustodyOverrideColor(override),
+      true,
+    );
+
+    const coversWholeDay =
+      overrideRanges.length === 1 &&
+      overrideRanges[0].startMinutes === 0 &&
+      overrideRanges[0].endMinutes === MINUTES_PER_DAY;
+
+    // An all-day exception replaces the recurring pattern outright. A timed one
+    // only replaces the hours it covers, so the rest of the day keeps the
+    // regular schedule.
+    if (coversWholeDay) return overrideRanges;
+
+    const clippedRecurring = overrideRanges.reduce(
+      (ranges, overrideRange) => subtractCustodyRange(ranges, overrideRange),
+      recurringRanges,
+    );
+
+    return [...clippedRecurring, ...overrideRanges];
+  };
+
+  const getCustodyBarSegmentsForDate = (date: Date) =>
+    getCustodyRangesForDate(date).map((segment, index) => ({
       id: `${segment.color}-${segment.startMinutes}-${segment.endMinutes}-${index}`,
-      leftPercent: (segment.startMinutes / (24 * 60)) * 100,
+      leftPercent: (segment.startMinutes / MINUTES_PER_DAY) * 100,
       widthPercent: Math.max(
         1,
-        ((segment.endMinutes - segment.startMinutes) / (24 * 60)) * 100,
+        ((segment.endMinutes - segment.startMinutes) / MINUTES_PER_DAY) * 100,
       ),
       color: segment.color,
+      isOverride: segment.isOverride,
       rowIndex: index,
     }));
-  };
 
   const buildInitialCustodyDrafts = () => {
     const drafts: Record<string, CustodyDraft> = {};
@@ -740,6 +938,7 @@ export default function Calendar({
     );
 
   const closeCustodyModal = () => {
+    setCustodyTimeEditor(null);
     if (!hasUnsavedCustodyChanges()) {
       setCustodyModalVisible(false);
       return;
@@ -966,6 +1165,9 @@ export default function Calendar({
         const { error } = await supabase
           .from("custody_schedules")
           .update({
+            // Keep the stored colour in sync with the guardian's personal
+            // colour so other views reading the schedule row agree with us.
+            color: parent.color,
             days_of_week: normalizedDays,
             day_time_ranges: dayTimeRangesPayload,
             week_pattern: normalizedWeekPattern,
@@ -1074,6 +1276,151 @@ export default function Calendar({
     }
   };
 
+  const openCustodyOverrideModal = () => {
+    const date = transitionDate ?? selectedDate;
+    if (!date) return;
+
+    if (custodyOverridesUnavailable) {
+      Alert.alert(
+        "Database update needed",
+        "Run supabase/custody_overrides_schema.sql in the Supabase SQL editor to enable one-off day changes.",
+      );
+      return;
+    }
+
+    const existing = getCustodyOverrideForDate(date);
+
+    if (!existing) {
+      setOverrideDraft({
+        ...EMPTY_OVERRIDE_DRAFT,
+        parentId: parents[0]?.id ?? null,
+        assignment: parents.length > 0 ? "parent" : "other",
+      });
+      setOverrideModalVisible(true);
+      return;
+    }
+
+    const assignment: CustodyOverrideAssignment = existing.assigned_user_id
+      ? "parent"
+      : existing.assigned_label?.trim()
+        ? "other"
+        : "none";
+
+    setOverrideDraft({
+      assignment,
+      parentId: existing.assigned_user_id ?? parents[0]?.id ?? null,
+      label: existing.assigned_label ?? "",
+      allDay: !existing.start_time || !existing.end_time,
+      startTime: existing.start_time || EMPTY_OVERRIDE_DRAFT.startTime,
+      endTime: existing.end_time || EMPTY_OVERRIDE_DRAFT.endTime,
+      note: existing.note ?? "",
+    });
+    setOverrideModalVisible(true);
+  };
+
+  const updateOverrideDraft = (patch: Partial<CustodyOverrideDraft>) => {
+    setOverrideDraft((previous) => ({ ...previous, ...patch }));
+  };
+
+  const saveCustodyOverride = async () => {
+    const date = transitionDate ?? selectedDate;
+    if (!date) return;
+
+    if (overrideDraft.assignment === "parent" && !overrideDraft.parentId) {
+      Alert.alert("Pick a guardian", "Choose who has the child on this day.");
+      return;
+    }
+
+    if (overrideDraft.assignment === "other" && !overrideDraft.label.trim()) {
+      Alert.alert(
+        "Add a name",
+        "Enter who is taking care of the child on this day.",
+      );
+      return;
+    }
+
+    if (
+      !overrideDraft.allDay &&
+      (!isValidTimeInput(overrideDraft.startTime) ||
+        !isValidTimeInput(overrideDraft.endTime))
+    ) {
+      Alert.alert("Invalid time", "Use HH:MM format for the time window.");
+      return;
+    }
+
+    setOverrideSaving(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData?.user?.id;
+      if (!currentUserId) {
+        Alert.alert("Error", "You must be signed in to change a day.");
+        return;
+      }
+
+      const { error } = await supabase.from("custody_overrides").upsert(
+        {
+          child_id: resolvedChildId,
+          date: formatLocalDateKey(date),
+          assigned_user_id:
+            overrideDraft.assignment === "parent"
+              ? overrideDraft.parentId
+              : null,
+          assigned_label:
+            overrideDraft.assignment === "other"
+              ? overrideDraft.label.trim()
+              : null,
+          start_time: overrideDraft.allDay ? null : overrideDraft.startTime,
+          end_time: overrideDraft.allDay ? null : overrideDraft.endTime,
+          note: overrideDraft.note.trim() ? overrideDraft.note.trim() : null,
+          created_by: currentUserId,
+        },
+        { onConflict: "child_id,date" },
+      );
+
+      if (error) throw error;
+
+      await fetchCustodyOverrides();
+      setOverrideModalVisible(false);
+    } catch (error) {
+      console.error("Error saving custody override:", error);
+      if (isMissingCustodyOverridesTableError(error)) {
+        Alert.alert(
+          "Database update needed",
+          "Run supabase/custody_overrides_schema.sql in the Supabase SQL editor to enable one-off day changes.",
+        );
+        return;
+      }
+      Alert.alert("Error", "Failed to save the change for this day.");
+    } finally {
+      setOverrideSaving(false);
+    }
+  };
+
+  const removeCustodyOverride = async () => {
+    const date = transitionDate ?? selectedDate;
+    if (!date) return;
+
+    const existing = getCustodyOverrideForDate(date);
+    if (!existing) {
+      setOverrideModalVisible(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("custody_overrides")
+        .delete()
+        .eq("id", existing.id);
+      if (error) throw error;
+
+      await fetchCustodyOverrides();
+      setOverrideModalVisible(false);
+    } catch (error) {
+      console.error("Error removing custody override:", error);
+      Alert.alert("Error", "Failed to remove the change for this day.");
+    }
+  };
+
   const navigateMonth = (direction: "prev" | "next") => {
     const newMonth = new Date(currentMonth);
     if (direction === "prev") {
@@ -1133,10 +1480,16 @@ export default function Calendar({
     });
   };
 
+  // Swiping between days must not fire while a sheet is open on top of the
+  // day view, otherwise the date changes underneath the open form.
+  const isDayViewOverlayOpen = () =>
+    editEventModalVisible || overrideModalVisible;
+
   const handleDayViewPanStateChange = (
     event: PanGestureHandlerStateChangeEvent,
   ) => {
     if (!dayViewModalVisible || !selectedDate) return;
+    if (isDayViewOverlayOpen()) return;
 
     const { state, translationX, translationY, velocityX } = event.nativeEvent;
     if (state !== State.END) return;
@@ -1170,6 +1523,7 @@ export default function Calendar({
   const handleDayViewTouchEnd = (event: GestureResponderEvent) => {
     if (!dayViewModalVisible || !selectedDate) return;
     if (isDayTransitioningRef.current) return;
+    if (isDayViewOverlayOpen()) return;
 
     const touch = event.nativeEvent.changedTouches[0];
     if (!touch) return;
@@ -1197,6 +1551,18 @@ export default function Calendar({
 
     setSelectedEvent(event);
     setEditEventModalVisible(true);
+  };
+
+  const resetAddEventForm = () => {
+    setNewEventName("");
+    setNewEventLocation("");
+    setNewEventNotes("");
+    setNewEventAllDay(false);
+    setNewEventRepeat("none");
+    setNewEventAlertMinutes(null);
+    setNewEventAlertDropdownOpen(false);
+    setStartTime("09:00");
+    setEndTime("17:00");
   };
 
   const handleAddEvent = async () => {
@@ -1265,8 +1631,8 @@ export default function Calendar({
             end_time: endTimeISO,
             event_type: "scheduled",
             activity_name: newEventName,
-            location: "",
-            notes: "",
+            location: newEventLocation.trim(),
+            notes: newEventNotes.trim(),
           })
           .select("id, start_time, activity_name")
           .single();
@@ -1290,13 +1656,7 @@ export default function Calendar({
       }
 
       setAddEventModalVisible(false);
-      setNewEventName("");
-      setNewEventAllDay(false);
-      setNewEventRepeat("none");
-      setNewEventAlertMinutes(null);
-      setNewEventAlertDropdownOpen(false);
-      setStartTime("09:00");
-      setEndTime("17:00");
+      resetAddEventForm();
       setSelectedDate(null);
       await Promise.all([fetchEvents(), fetchRecurringActivities()]);
     } catch (error) {
@@ -1305,16 +1665,39 @@ export default function Calendar({
     }
   };
 
+  const getTimeFromEventValue = (value?: string | null) => {
+    if (!value) return null;
+    const parts = value.split("T");
+    if (parts.length < 2) return null;
+    return normalizeClockTime(parts[1].substring(0, 5));
+  };
+
+  const setSelectedEventTime = (field: "start" | "end", value: string) => {
+    setSelectedEvent((previous: CalendarEvent | null) => {
+      if (!previous) return previous;
+      const key = field === "start" ? "start_time" : "end_time";
+      const currentValue = previous[key] || "";
+      const datePart =
+        currentValue.split("T")[0] || formatLocalDateInput(new Date());
+      return { ...previous, [key]: `${datePart}T${value}:00` };
+    });
+  };
+
   const renderEditEventOverlay = () => (
     <View style={styles.modalOverlay}>
       <View
         style={[
-          styles.modalContent,
+          styles.editEventModalShell,
           {
             backgroundColor: Colors[colorScheme ?? "light"].cardBackground,
           },
         ]}
       >
+        <ScrollView
+          contentContainerStyle={styles.editEventModalContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="always"
+        >
         <Text
           style={[
             styles.modalTitle,
@@ -1407,99 +1790,59 @@ export default function Calendar({
           placeholder="Event name"
           placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
         />
+
+        <TextInput
+          style={[
+            styles.modalInput,
+            {
+              backgroundColor: Colors[colorScheme ?? "light"].inputBackground,
+              color: Colors[colorScheme ?? "light"].text,
+              borderColor: Colors[colorScheme ?? "light"].border,
+            },
+          ]}
+          value={selectedEvent?.location ?? ""}
+          onChangeText={(text) =>
+            setSelectedEvent((prev: CalendarEvent | null) =>
+              prev ? { ...prev, location: text } : null,
+            )
+          }
+          placeholder="Location"
+          placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
+        />
+
+        <TextInput
+          style={[
+            styles.modalInput,
+            styles.modalMultilineInput,
+            {
+              backgroundColor: Colors[colorScheme ?? "light"].inputBackground,
+              color: Colors[colorScheme ?? "light"].text,
+              borderColor: Colors[colorScheme ?? "light"].border,
+            },
+          ]}
+          value={selectedEvent?.notes ?? ""}
+          onChangeText={(text) =>
+            setSelectedEvent((prev: CalendarEvent | null) =>
+              prev ? { ...prev, notes: text } : null,
+            )
+          }
+          placeholder="Notes"
+          placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
+          multiline
+          textAlignVertical="top"
+        />
+
         <View style={styles.timeInputsRow}>
-          <View style={styles.timeInputContainer}>
-            <Text
-              style={[
-                styles.timeLabel,
-                { color: Colors[colorScheme ?? "light"].text },
-              ]}
-            >
-              Start Time
-            </Text>
-            <TextInput
-              style={[
-                styles.timeInput,
-                {
-                  backgroundColor:
-                    Colors[colorScheme ?? "light"].inputBackground,
-                  color: Colors[colorScheme ?? "light"].text,
-                  borderColor: Colors[colorScheme ?? "light"].border,
-                },
-              ]}
-              value={
-                selectedEvent?.start_time
-                  ? (() => {
-                      const parts = selectedEvent.start_time.split("T");
-                      if (parts.length < 2) return "";
-                      return parts[1].substring(0, 5);
-                    })()
-                  : ""
-              }
-              onChangeText={(text) => {
-                if (!selectedEvent) return;
-                const parts = selectedEvent.start_time.split("T");
-                const dateStr =
-                  parts.length > 0
-                    ? parts[0]
-                    : new Date().toISOString().split("T")[0];
-                if (/^\d{0,2}:\d{0,2}$/.test(text)) {
-                  setSelectedEvent({
-                    ...selectedEvent,
-                    start_time: `${dateStr}T${text}`,
-                  });
-                }
-              }}
-              placeholder="09:00"
-              placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
-            />
-          </View>
-          <View style={styles.timeInputContainer}>
-            <Text
-              style={[
-                styles.timeLabel,
-                { color: Colors[colorScheme ?? "light"].text },
-              ]}
-            >
-              End Time
-            </Text>
-            <TextInput
-              style={[
-                styles.timeInput,
-                {
-                  backgroundColor:
-                    Colors[colorScheme ?? "light"].inputBackground,
-                  color: Colors[colorScheme ?? "light"].text,
-                  borderColor: Colors[colorScheme ?? "light"].border,
-                },
-              ]}
-              value={
-                selectedEvent?.end_time
-                  ? (() => {
-                      const parts = selectedEvent.end_time.split("T");
-                      if (parts.length < 2) return "";
-                      return parts[1].substring(0, 5);
-                    })()
-                  : ""
-              }
-              onChangeText={(text) => {
-                if (!selectedEvent) return;
-                const parts = selectedEvent.end_time.split("T");
-                const dateStr =
-                  parts.length > 0
-                    ? parts[0]
-                    : new Date().toISOString().split("T")[0];
-                if (/^\d{0,2}:\d{0,2}$/.test(text)) {
-                  setSelectedEvent({
-                    ...selectedEvent,
-                    end_time: `${dateStr}T${text}`,
-                  });
-                }
-              }}
-              placeholder="17:00"
-              placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
-            />
-          </View>
+          <TimeWheelPicker
+            label="Start Time"
+            value={getTimeFromEventValue(selectedEvent?.start_time) ?? "09:00"}
+            onChange={(value) => setSelectedEventTime("start", value)}
+          />
+          <TimeWheelPicker
+            label="End Time"
+            value={getTimeFromEventValue(selectedEvent?.end_time) ?? "17:00"}
+            onChange={(value) => setSelectedEventTime("end", value)}
+          />
         </View>
         <View style={styles.modalButtons}>
           <TouchableOpacity
@@ -1574,6 +1917,8 @@ export default function Calendar({
                   .from("calendar_events")
                   .update({
                     activity_name: selectedEvent.activity_name,
+                    location: selectedEvent.location?.trim() ?? "",
+                    notes: selectedEvent.notes?.trim() ?? "",
                     start_time: normalizeTime(selectedEvent.start_time),
                     end_time: normalizeTime(selectedEvent.end_time),
                   })
@@ -1600,9 +1945,391 @@ export default function Calendar({
             </Text>
           </TouchableOpacity>
         </View>
+        </ScrollView>
       </View>
     </View>
   );
+
+  const renderDayCustodyBanner = () => {
+    const date = transitionDate ?? selectedDate;
+    if (!date) return null;
+
+    const override = getCustodyOverrideForDate(date);
+    const recurringNames = getRecurringCustodySchedulesForDate(date).map(
+      (schedule) => getParentNameForUser(schedule.user_id),
+    );
+
+    const accentColor = override
+      ? getCustodyOverrideColor(override)
+      : (getParentColorForUser(
+          getRecurringCustodySchedulesForDate(date)[0]?.user_id ?? null,
+        ) ?? theme.textLight);
+
+    const summary = override
+      ? `${getCustodyOverrideAssigneeLabel(override)} · ${formatCustodyOverrideWindow(override)}`
+      : recurringNames.length > 0
+        ? recurringNames.join(" · ")
+        : "No one is scheduled";
+
+    return (
+      <View
+        style={[
+          styles.dayCustodyBanner,
+          { backgroundColor: theme.cardBackground, borderColor: theme.border },
+        ]}
+      >
+        <View style={styles.dayCustodyBannerRow}>
+          <View
+            style={[
+              styles.dayCustodyDot,
+              { backgroundColor: accentColor },
+              override ? styles.dayCustodyDotOverride : null,
+            ]}
+          />
+          <View style={styles.dayCustodyBannerTextGroup}>
+            <Text
+              style={[
+                styles.dayCustodyBannerLabel,
+                { color: isDarkMode ? theme.textSecondary : theme.textLight },
+              ]}
+            >
+              {override ? "One-off change" : "Responsibility"}
+            </Text>
+            <Text
+              style={[styles.dayCustodyBannerValue, { color: theme.text }]}
+              numberOfLines={2}
+            >
+              {summary}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.dayCustodyOverrideButton,
+              { borderColor: theme.tint },
+            ]}
+            onPress={openCustodyOverrideModal}
+            accessibilityRole="button"
+            accessibilityLabel={
+              override ? "Edit this day's change" : "Override this day"
+            }
+          >
+            <Text
+              style={[
+                styles.dayCustodyOverrideButtonText,
+                { color: theme.tint },
+              ]}
+            >
+              {override ? "Edit day" : "Override day"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {override && override.start_time && override.end_time ? (
+          <Text
+            style={[
+              styles.dayCustodyBannerHint,
+              { color: isDarkMode ? theme.textSecondary : theme.textLight },
+            ]}
+          >
+            Outside {override.start_time}–{override.end_time} the regular
+            schedule still applies.
+          </Text>
+        ) : null}
+
+        {override?.note?.trim() ? (
+          <View
+            style={[
+              styles.dayCustodyNote,
+              {
+                backgroundColor: isDarkMode ? "#2A2418" : "#FFF7E6",
+                borderColor: isDarkMode ? "#8A6D2F" : "#F5C35B",
+              },
+            ]}
+          >
+            <Text style={[styles.dayCustodyNoteText, { color: theme.text }]}>
+              {override.note.trim()}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderCustodyOverrideOverlay = () => {
+    const date = transitionDate ?? selectedDate;
+    const existingOverride = getCustodyOverrideForDate(date);
+
+    const assignmentOptions: {
+      value: CustodyOverrideAssignment;
+      label: string;
+    }[] = [
+      { value: "parent", label: "A guardian" },
+      { value: "other", label: "Someone else" },
+      { value: "none", label: "No one" },
+    ];
+
+    return (
+      <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.overrideModalShell,
+            { backgroundColor: theme.cardBackground },
+          ]}
+        >
+          <ScrollView
+            contentContainerStyle={styles.overrideModalContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="always"
+          >
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              Change this day
+            </Text>
+            <Text
+              style={[
+                styles.custodySubtitle,
+                {
+                  color: isDarkMode ? theme.textSecondary : theme.textLight,
+                  textAlign: "left",
+                },
+              ]}
+            >
+              {date
+                ? date.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })
+                : ""}{" "}
+              — a one-off exception that only affects this date.
+            </Text>
+
+            <Text style={[styles.timeLabel, { color: theme.text }]}>
+              Who has the child?
+            </Text>
+            <View style={styles.overrideChipRow}>
+              {assignmentOptions.map((option) => {
+                const isActive = overrideDraft.assignment === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.overrideChip,
+                      {
+                        borderColor: theme.tint,
+                        backgroundColor: isActive
+                          ? theme.tint
+                          : theme.inputBackground,
+                      },
+                    ]}
+                    onPress={() =>
+                      updateOverrideDraft({ assignment: option.value })
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.overrideChipText,
+                        { color: isActive ? "#fff" : theme.text },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {overrideDraft.assignment === "parent" ? (
+              parents.length === 0 ? (
+                <Text
+                  style={[
+                    styles.repeatHintText,
+                    {
+                      color: isDarkMode ? theme.textSecondary : theme.textLight,
+                    },
+                  ]}
+                >
+                  No guardians found for this child.
+                </Text>
+              ) : (
+                <View style={styles.overrideChipRow}>
+                  {parents.map((parent) => {
+                    const isActive = overrideDraft.parentId === parent.id;
+                    return (
+                      <TouchableOpacity
+                        key={parent.id}
+                        style={[
+                          styles.overrideChip,
+                          {
+                            borderColor: parent.color,
+                            backgroundColor: isActive
+                              ? parent.color
+                              : theme.inputBackground,
+                          },
+                        ]}
+                        onPress={() =>
+                          updateOverrideDraft({ parentId: parent.id })
+                        }
+                      >
+                        <Text
+                          style={[
+                            styles.overrideChipText,
+                            {
+                              color: isActive
+                                ? getReadableTextColor(parent.color)
+                                : theme.text,
+                            },
+                          ]}
+                        >
+                          {parent.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )
+            ) : null}
+
+            {overrideDraft.assignment === "other" ? (
+              <TextInput
+                style={[
+                  styles.modalInput,
+                  {
+                    backgroundColor: theme.inputBackground,
+                    color: theme.text,
+                    borderColor: theme.border,
+                  },
+                ]}
+                value={overrideDraft.label}
+                onChangeText={(text) => updateOverrideDraft({ label: text })}
+                placeholder="Name (e.g. Aunt Lisa)"
+                placeholderTextColor={theme.textLight}
+              />
+            ) : null}
+
+            {overrideDraft.assignment === "none" ? (
+              <Text
+                style={[
+                  styles.repeatHintText,
+                  { color: isDarkMode ? theme.textSecondary : theme.textLight },
+                ]}
+              >
+                Neither guardian has the child on this date.
+              </Text>
+            ) : null}
+
+            <View style={styles.allDayToggleRow}>
+              <Text style={[styles.timeLabel, { color: theme.text }]}>
+                All day
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.allDayToggleButton,
+                  {
+                    borderColor: theme.border,
+                    backgroundColor: overrideDraft.allDay
+                      ? theme.tint
+                      : theme.inputBackground,
+                  },
+                ]}
+                onPress={() =>
+                  updateOverrideDraft({ allDay: !overrideDraft.allDay })
+                }
+              >
+                <Text
+                  style={[
+                    styles.allDayToggleButtonText,
+                    { color: overrideDraft.allDay ? "white" : theme.text },
+                  ]}
+                >
+                  {overrideDraft.allDay ? "Enabled" : "Disabled"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {overrideDraft.allDay ? null : (
+              <View style={styles.timeInputsRow}>
+                <TimeWheelPicker
+                  label="From"
+                  value={overrideDraft.startTime}
+                  onChange={(value) => updateOverrideDraft({ startTime: value })}
+                />
+                <TimeWheelPicker
+                  label="To"
+                  value={overrideDraft.endTime}
+                  onChange={(value) => updateOverrideDraft({ endTime: value })}
+                />
+              </View>
+            )}
+
+            <Text style={[styles.timeLabel, { color: theme.text }]}>
+              Handover note
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                styles.modalMultilineInput,
+                {
+                  backgroundColor: theme.inputBackground,
+                  color: theme.text,
+                  borderColor: theme.border,
+                },
+              ]}
+              value={overrideDraft.note}
+              onChangeText={(text) => updateOverrideDraft({ note: text })}
+              placeholder="e.g. If she gets sick at school, Andy picks her up"
+              placeholderTextColor={theme.textLight}
+              multiline
+              textAlignVertical="top"
+            />
+
+            <View style={styles.modalButtons}>
+              {existingOverride ? (
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.deleteButton,
+                    { backgroundColor: "#FF3B30" },
+                  ]}
+                  onPress={removeCustodyOverride}
+                  disabled={overrideSaving}
+                >
+                  <Text style={[styles.modalButtonText, { color: "white" }]}>
+                    Remove
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.cancelButton,
+                  { borderColor: theme.border },
+                ]}
+                onPress={() => setOverrideModalVisible(false)}
+                disabled={overrideSaving}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.addButton,
+                  { backgroundColor: theme.tint, opacity: overrideSaving ? 0.6 : 1 },
+                ]}
+                onPress={saveCustodyOverride}
+                disabled={overrideSaving}
+              >
+                <Text style={[styles.modalButtonText, styles.addButtonText]}>
+                  {overrideSaving ? "Saving…" : "Save"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    );
+  };
 
   const monthNames = [
     "January",
@@ -1772,6 +2499,7 @@ export default function Calendar({
                     const custodySegments = getCustodyBarSegmentsForDate(
                       dayObj.date,
                     );
+                    const dayOverride = getCustodyOverrideForDate(dayObj.date);
                     const isToday =
                       dayObj.date.toDateString() === new Date().toDateString();
 
@@ -1797,8 +2525,10 @@ export default function Calendar({
                               styles.custodyBarContainer,
                               {
                                 height: Math.min(
-                                  custodySegments.length * 4,
-                                  16,
+                                  custodySegments.length *
+                                    CUSTODY_BAR_ROW_HEIGHT,
+                                  CUSTODY_BAR_MAX_ROWS *
+                                    CUSTODY_BAR_ROW_HEIGHT,
                                 ),
                               },
                             ]}
@@ -1809,10 +2539,22 @@ export default function Calendar({
                                 key={segment.id}
                                 style={[
                                   styles.custodyBar,
+                                  // A one-off exception is drawn as an outlined
+                                  // bar so it reads differently from the solid
+                                  // bars of the recurring pattern.
+                                  segment.isOverride
+                                    ? styles.custodyBarOverride
+                                    : null,
                                   {
-                                    backgroundColor: segment.color,
+                                    backgroundColor: segment.isOverride
+                                      ? `${segment.color}4D`
+                                      : segment.color,
+                                    borderColor: segment.color,
                                     left: `${segment.leftPercent}%`,
-                                    top: (segment.rowIndex % 4) * 4,
+                                    top:
+                                      (segment.rowIndex %
+                                        CUSTODY_BAR_MAX_ROWS) *
+                                      CUSTODY_BAR_ROW_HEIGHT,
                                     width: `${segment.widthPercent}%`,
                                   },
                                 ]}
@@ -1820,6 +2562,23 @@ export default function Calendar({
                             ))}
                           </View>
                         )}
+
+                        {/* One-off exception marker */}
+                        {dayOverride ? (
+                          <View
+                            style={[
+                              styles.custodyOverrideMarker,
+                              {
+                                backgroundColor:
+                                  getCustodyOverrideColor(dayOverride),
+                                borderColor:
+                                  Colors[colorScheme ?? "light"]
+                                    .cardBackground,
+                              },
+                            ]}
+                            pointerEvents="none"
+                          />
+                        ) : null}
 
                         {/* Date Number */}
                         <View
@@ -2029,6 +2788,7 @@ export default function Calendar({
                 <Text style={styles.addEventButtonText}>+ Add</Text>
               </TouchableOpacity>
             </View>
+            {renderDayCustodyBanner()}
             <View style={styles.dayViewContentViewport}>
               <Animated.View
                 style={[
@@ -2066,6 +2826,12 @@ export default function Calendar({
             {editEventModalVisible ? (
               <View style={styles.dayModalOverlayAbsolute}>
                 {renderEditEventOverlay()}
+              </View>
+            ) : null}
+
+            {overrideModalVisible ? (
+              <View style={styles.dayModalOverlayAbsolute}>
+                {renderCustodyOverrideOverlay()}
               </View>
             ) : null}
           </View>
@@ -2235,6 +3001,47 @@ export default function Calendar({
                 returnKeyType="done"
                 onSubmitEditing={dismissAddEventKeyboard}
                 blurOnSubmit
+              />
+
+              {/* Location */}
+              <TextInput
+                style={[
+                  styles.modalInput,
+                  {
+                    backgroundColor:
+                      Colors[colorScheme ?? "light"].inputBackground,
+                    color: Colors[colorScheme ?? "light"].text,
+                    borderColor: Colors[colorScheme ?? "light"].border,
+                  },
+                ]}
+                value={newEventLocation}
+                onChangeText={setNewEventLocation}
+                placeholder="Location"
+                placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
+                autoCapitalize="sentences"
+                returnKeyType="done"
+                onSubmitEditing={dismissAddEventKeyboard}
+                blurOnSubmit
+              />
+
+              {/* Notes */}
+              <TextInput
+                style={[
+                  styles.modalInput,
+                  styles.modalMultilineInput,
+                  {
+                    backgroundColor:
+                      Colors[colorScheme ?? "light"].inputBackground,
+                    color: Colors[colorScheme ?? "light"].text,
+                    borderColor: Colors[colorScheme ?? "light"].border,
+                  },
+                ]}
+                value={newEventNotes}
+                onChangeText={setNewEventNotes}
+                placeholder="Notes"
+                placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
+                multiline
+                textAlignVertical="top"
               />
 
               <View style={styles.allDayToggleRow}>
@@ -2496,13 +3303,7 @@ export default function Calendar({
                   onPress={() => {
                     pendingAddEventFocusRef.current = null;
                     setAddEventModalVisible(false);
-                    setNewEventName("");
-                    setNewEventAllDay(false);
-                    setNewEventRepeat("none");
-                    setNewEventAlertMinutes(null);
-                    setNewEventAlertDropdownOpen(false);
-                    setStartTime("09:00");
-                    setEndTime("17:00");
+                    resetAddEventForm();
                   }}
                 >
                   <Text
@@ -2754,8 +3555,14 @@ export default function Calendar({
                       <View style={styles.weekPatternRow}>
                         {[
                           { value: "all", label: "Every week" },
-                          { value: "odd", label: "Odd weeks" },
-                          { value: "even", label: "Even weeks" },
+                          {
+                            value: "odd",
+                            label: "Every other week · odd",
+                          },
+                          {
+                            value: "even",
+                            label: "Every other week · even",
+                          },
                         ].map((option) => {
                           const isActive = draft.weekPattern === option.value;
                           return (
@@ -2795,6 +3602,22 @@ export default function Calendar({
                           );
                         })}
                       </View>
+
+                      <Text
+                        style={[
+                          styles.repeatHintText,
+                          styles.weekPatternHint,
+                          {
+                            color: isDarkMode
+                              ? theme.textSecondary
+                              : theme.textLight,
+                          },
+                        ]}
+                      >
+                        {draft.weekPattern === "all"
+                          ? "Applies every week."
+                          : `Applies on ${draft.weekPattern} ISO week numbers — this week is ${getWeekPatternForDate(new Date())}.`}
+                      </Text>
 
                       <View style={styles.templateRow}>
                         <TouchableOpacity
@@ -2963,89 +3786,128 @@ export default function Calendar({
                               { color: theme.text },
                             ]}
                           >
-                            Responsibility windows per day (HH:MM)
+                            Responsibility windows per day
                           </Text>
                           {selectedDays.map((dayIndex) => {
                             const range = draft.dayTimeRanges[dayIndex] || {
                               start: "00:00",
                               end: "23:59",
                             };
+                            const isEditingStart =
+                              custodyTimeEditor?.parentId === parent.id &&
+                              custodyTimeEditor?.dayIndex === dayIndex &&
+                              custodyTimeEditor?.field === "start";
+                            const isEditingEnd =
+                              custodyTimeEditor?.parentId === parent.id &&
+                              custodyTimeEditor?.dayIndex === dayIndex &&
+                              custodyTimeEditor?.field === "end";
 
-                            return (
-                              <View
-                                key={`${parent.id}-${dayIndex}`}
-                                style={styles.timeRangeRow}
+                            const renderTimeButton = (
+                              field: "start" | "end",
+                              isEditing: boolean,
+                            ) => (
+                              <TouchableOpacity
+                                style={[
+                                  styles.timeRangeButton,
+                                  {
+                                    borderColor: isEditing
+                                      ? theme.tint
+                                      : theme.border,
+                                    backgroundColor: theme.inputBackground,
+                                  },
+                                ]}
+                                onPress={() =>
+                                  setCustodyTimeEditor(
+                                    isEditing
+                                      ? null
+                                      : {
+                                          parentId: parent.id,
+                                          dayIndex,
+                                          field,
+                                        },
+                                  )
+                                }
+                                accessibilityRole="button"
+                                accessibilityLabel={`Set ${field} time for ${dayLabelForIndex[dayIndex]}`}
                               >
                                 <Text
                                   style={[
-                                    styles.timeRangeDayLabel,
-                                    {
-                                      color: theme.text,
-                                    },
+                                    styles.timeRangeButtonText,
+                                    { color: theme.text },
                                   ]}
                                 >
-                                  {dayLabelForIndex[dayIndex]}
+                                  {range[field]}
                                 </Text>
-                                <TextInput
-                                  style={[
-                                    styles.timeRangeInput,
-                                    {
-                                      color: theme.text,
-                                      borderColor: theme.border,
-                                      backgroundColor: theme.inputBackground,
-                                    },
-                                  ]}
-                                  value={range.start}
-                                  onChangeText={(value) =>
-                                    updateDraftTime(
-                                      parent.id,
-                                      dayIndex,
-                                      "start",
-                                      value,
-                                    )
-                                  }
-                                  placeholder="00:00"
-                                  placeholderTextColor={theme.textLight}
-                                  keyboardType="numbers-and-punctuation"
-                                  autoCapitalize="none"
-                                  autoCorrect={false}
-                                />
-                                <Text
-                                  style={[
-                                    styles.timeRangeSeparator,
-                                    {
-                                      color: isDarkMode
-                                        ? theme.textSecondary
-                                        : theme.textLight,
-                                    },
-                                  ]}
-                                >
-                                  to
-                                </Text>
-                                <TextInput
-                                  style={[
-                                    styles.timeRangeInput,
-                                    {
-                                      color: theme.text,
-                                      borderColor: theme.border,
-                                      backgroundColor: theme.inputBackground,
-                                    },
-                                  ]}
-                                  value={range.end}
-                                  onChangeText={(value) =>
-                                    updateDraftTime(
-                                      parent.id,
-                                      dayIndex,
-                                      "end",
-                                      value,
-                                    )
-                                  }
-                                  placeholder="23:59"
-                                  placeholderTextColor={theme.textLight}
-                                  keyboardType="numbers-and-punctuation"
-                                  autoCapitalize="none"
-                                  autoCorrect={false}
-                                />
+                              </TouchableOpacity>
+                            );
+
+                            return (
+                              <View key={`${parent.id}-${dayIndex}`}>
+                                <View style={styles.timeRangeRow}>
+                                  <Text
+                                    style={[
+                                      styles.timeRangeDayLabel,
+                                      {
+                                        color: theme.text,
+                                      },
+                                    ]}
+                                  >
+                                    {dayLabelForIndex[dayIndex]}
+                                  </Text>
+                                  {renderTimeButton("start", isEditingStart)}
+                                  <Text
+                                    style={[
+                                      styles.timeRangeSeparator,
+                                      {
+                                        color: isDarkMode
+                                          ? theme.textSecondary
+                                          : theme.textLight,
+                                      },
+                                    ]}
+                                  >
+                                    to
+                                  </Text>
+                                  {renderTimeButton("end", isEditingEnd)}
+                                </View>
+
+                                {/* Scroll-wheel entry replaces manual HH:MM
+                                    typing; only one row expands at a time so
+                                    the modal stays usable with seven days. */}
+                                {isEditingStart || isEditingEnd ? (
+                                  <View style={styles.custodyTimeWheelRow}>
+                                    <TimeWheelPicker
+                                      label={
+                                        isEditingStart
+                                          ? `${dayLabelForIndex[dayIndex]} from`
+                                          : `${dayLabelForIndex[dayIndex]} to`
+                                      }
+                                      value={
+                                        isEditingStart ? range.start : range.end
+                                      }
+                                      onChange={(value) =>
+                                        updateDraftTime(
+                                          parent.id,
+                                          dayIndex,
+                                          isEditingStart ? "start" : "end",
+                                          value,
+                                        )
+                                      }
+                                    />
+                                    <TouchableOpacity
+                                      style={[
+                                        styles.custodyTimeWheelDone,
+                                        { backgroundColor: theme.tint },
+                                      ]}
+                                      onPress={() => setCustodyTimeEditor(null)}
+                                    >
+                                      <Text
+                                        style={styles.custodyTimeWheelDoneText}
+                                      >
+                                        Done
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                ) : null}
                               </View>
                             );
                           })}
@@ -3198,6 +4060,20 @@ const styles = StyleSheet.create({
     top: 0,
     height: 3,
   },
+  custodyBarOverride: {
+    borderRadius: 2,
+    borderWidth: 1,
+    height: 4,
+  },
+  custodyOverrideMarker: {
+    position: "absolute",
+    top: 5,
+    right: 3,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.5,
+  },
   dateNumberContainer: {
     width: 24,
     height: 24,
@@ -3241,6 +4117,94 @@ const styles = StyleSheet.create({
     width: "85%",
     borderRadius: 12,
     padding: 24,
+  },
+  editEventModalShell: {
+    width: "85%",
+    maxHeight: "92%",
+    borderRadius: 12,
+  },
+  editEventModalContent: {
+    padding: 24,
+  },
+  overrideModalShell: {
+    width: "88%",
+    maxHeight: "92%",
+    borderRadius: 12,
+  },
+  overrideModalContent: {
+    padding: 20,
+  },
+  overrideChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  overrideChip: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  overrideChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  dayCustodyBanner: {
+    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  dayCustodyBannerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  dayCustodyDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  dayCustodyDotOverride: {
+    borderWidth: 2,
+    borderColor: "#00000033",
+  },
+  dayCustodyBannerTextGroup: {
+    flex: 1,
+  },
+  dayCustodyBannerLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  dayCustodyBannerValue: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  dayCustodyBannerHint: {
+    fontSize: 11,
+    marginTop: 6,
+  },
+  dayCustodyOverrideButton: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  dayCustodyOverrideButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  dayCustodyNote: {
+    borderWidth: 1,
+    borderRadius: 10,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  dayCustodyNoteText: {
+    fontSize: 12,
+    lineHeight: 17,
   },
   addEventModalContent: {
     width: "100%",
@@ -3371,6 +4335,10 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     marginBottom: 12,
+  },
+  modalMultilineInput: {
+    minHeight: 72,
+    paddingTop: 12,
   },
   timeInputsRow: {
     flexDirection: "row",
@@ -3721,6 +4689,39 @@ const styles = StyleSheet.create({
     minWidth: 70,
     textAlign: "center",
     fontSize: 12,
+  },
+  timeRangeButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minWidth: 70,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timeRangeButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  custodyTimeWheelRow: {
+    marginTop: 8,
+    marginBottom: 4,
+    gap: 8,
+  },
+  custodyTimeWheelDone: {
+    alignSelf: "flex-end",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  custodyTimeWheelDoneText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  weekPatternHint: {
+    marginTop: 0,
+    marginBottom: 8,
   },
   timeRangeSeparator: {
     fontSize: 12,
