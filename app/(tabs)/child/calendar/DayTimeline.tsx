@@ -11,6 +11,17 @@ import {
 import type { CalendarEvent } from "./types";
 import { isAllDayEvent, layoutDayEvents } from "./utils";
 
+/**
+ * Event blocks are laid out at 1px per minute, which makes a 15 minute event a
+ * 15px tall touch target — far below the ~44px platform guideline and easy to
+ * miss. Short events are floored to this height and given extra hit slop so
+ * they can be tapped anywhere near their slot.
+ */
+const MIN_EVENT_BLOCK_HEIGHT = 30;
+/** Below this height there is no room for the second (time) line. */
+const COMPACT_EVENT_BLOCK_HEIGHT = 44;
+const EVENT_BLOCK_HIT_SLOP = { top: 6, bottom: 6, left: 6, right: 6 };
+
 interface DayTimelineProps {
   colorScheme: "light" | "dark" | null | undefined;
   date: Date | null;
@@ -127,15 +138,22 @@ export function DayTimeline({
                 ? item.columnIndex * ((columnWidthPx ?? 0) + eventColumnGap)
                 : null;
 
+              const blockHeight = Math.max(
+                item.durationMinutes * pixelsPerMinute,
+                MIN_EVENT_BLOCK_HEIGHT,
+              );
+              const isCompact = blockHeight < COMPACT_EVENT_BLOCK_HEIGHT;
+
               return (
                 <TouchableOpacity
                   key={item.event.id}
                   style={[
                     styles.dayEventBlock,
+                    isCompact && styles.dayEventBlockCompact,
                     {
                       backgroundColor:
                         item.event.color ?? Colors[colorScheme ?? "light"].tint,
-                      height: item.durationMinutes * pixelsPerMinute,
+                      height: blockHeight,
                       top: item.startMinutes * pixelsPerMinute,
                       left: leftPx !== null ? leftPx : `${leftPct}%`,
                       width:
@@ -144,15 +162,24 @@ export function DayTimeline({
                           : `${columnWidthPct}%`,
                     },
                   ]}
+                  hitSlop={EVENT_BLOCK_HIT_SLOP}
                   onPress={() => onEventPress(item.event)}
                 >
-                  <Text style={styles.dayEventName} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.dayEventName,
+                      isCompact && styles.dayEventNameCompact,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {item.event.activity_name}
                   </Text>
-                  <Text style={styles.dayEventTime} numberOfLines={1}>
-                    {item.startTimeStr.substring(0, 5)} -{" "}
-                    {item.endTimeStr.substring(0, 5)}
-                  </Text>
+                  {isCompact ? null : (
+                    <Text style={styles.dayEventTime} numberOfLines={1}>
+                      {item.startTimeStr.substring(0, 5)} -{" "}
+                      {item.endTimeStr.substring(0, 5)}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -248,10 +275,17 @@ const styles = StyleSheet.create({
     zIndex: 3,
     elevation: 3,
   },
+  dayEventBlockCompact: {
+    justifyContent: "center",
+    paddingVertical: 2,
+  },
   dayEventName: {
     color: "white",
     fontSize: 12,
     fontWeight: "700",
+  },
+  dayEventNameCompact: {
+    fontSize: 11,
   },
   dayEventTime: {
     color: "rgba(255, 255, 255, 0.95)",
