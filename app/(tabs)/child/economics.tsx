@@ -53,6 +53,45 @@ const CURRENCY_FORMAT: Record<CurrencyCode, { symbol: string; position: "prefix"
 const isCurrencyCode = (value: string | null | undefined): value is CurrencyCode =>
   !!value && (CURRENCY_OPTIONS as readonly string[]).includes(value);
 
+// DOP-44: even-split balance calculator.
+// balance.amount > 0 means that parent is owed money (paid more than their
+// fair share); < 0 means they owe money.
+type ParentBalance = { name: string; amount: number };
+type Settlement = { from: string; to: string; amount: number };
+
+const computeSettlements = (balances: ParentBalance[]): Settlement[] => {
+  const EPSILON = 0.01;
+  const creditors = balances
+    .filter((b) => b.amount > EPSILON)
+    .map((b) => ({ name: b.name, amount: b.amount }))
+    .sort((a, b) => b.amount - a.amount);
+  const debtors = balances
+    .filter((b) => b.amount < -EPSILON)
+    .map((b) => ({ name: b.name, amount: -b.amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const settlements: Settlement[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < debtors.length && j < creditors.length) {
+    const debtor = debtors[i];
+    const creditor = creditors[j];
+    const amount = Math.min(debtor.amount, creditor.amount);
+
+    if (amount > EPSILON) {
+      settlements.push({ from: debtor.name, to: creditor.name, amount });
+    }
+
+    debtor.amount -= amount;
+    creditor.amount -= amount;
+
+    if (debtor.amount <= EPSILON) i += 1;
+    if (creditor.amount <= EPSILON) j += 1;
+  }
+
+  return settlements;
+};
+
 export default function Economics({ childName, childId, onBack }: EconomicsProps) {
   const router = useRouter();
   const params = useLocalSearchParams<{ childName?: string; childId?: string }>();
@@ -231,6 +270,37 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
     if (timeFilter === "month") return "This Month";
     if (timeFilter === "year") return "This Year";
     return "Total";
+  };
+
+  // DOP-44: assumes expenses are split evenly among all parents linked to the
+  // child (not just the distinct set of payers seen in expenses so far).
+  // Only expenses whose `payer` matches a currently-linked parent's display
+  // name are counted, so the resulting balances always net out to zero.
+  const getParentBalances = (): { balances: ParentBalance[]; fairShare: number } => {
+    if (parents.length < 2) return { balances: [], fairShare: 0 };
+
+    const parentNames = parents.map((p) => getParentDisplayName(p));
+    const paidByParent = new Map<string, number>(parentNames.map((name) => [name, 0]));
+
+    let totalMatched = 0;
+    expenses.forEach((e) => {
+      const normalizedPayer = e.payer?.trim().toLowerCase();
+      const matchedName = parentNames.find(
+        (name) => name.trim().toLowerCase() === normalizedPayer,
+      );
+      if (matchedName) {
+        paidByParent.set(matchedName, (paidByParent.get(matchedName) ?? 0) + e.amount);
+        totalMatched += e.amount;
+      }
+    });
+
+    const fairShare = totalMatched / parentNames.length;
+    const balances = parentNames.map((name) => ({
+      name,
+      amount: (paidByParent.get(name) ?? 0) - fairShare,
+    }));
+
+    return { balances, fairShare };
   };
 
   const formatCurrency = (value: number) => {
@@ -554,6 +624,102 @@ export default function Economics({ childName, childId, onBack }: EconomicsProps
           >
             W = week, M = month, Y = year, T = total
           </Text>
+        </View>
+
+        <View
+          style={[
+            styles.summaryCard,
+            { backgroundColor: Colors[colorScheme ?? "light"].cardBackground },
+          ]}
+        >
+          <Text
+            style={[styles.summaryTitle, { color: Colors[colorScheme ?? "light"].text }]}
+          >
+            Balance
+          </Text>
+
+          {(() => {
+            if (parents.length < 2) {
+              return (
+                <Text
+                  style={[
+                    styles.balanceHelperText,
+                    { color: Colors[colorScheme ?? "light"].textLight },
+                  ]}
+                >
+                  Add another co-parent to this child to calculate the balance.
+                </Text>
+              );
+            }
+
+            const { balances, fairShare } = getParentBalances();
+            const settlements = computeSettlements(balances);
+
+            if (fairShare === 0) {
+              return (
+                <Text
+                  style={[
+                    styles.balanceHelperText,
+                    { color: Colors[colorScheme ?? "light"].textLight },
+                  ]}
+                >
+                  No expenses yet
+                </Text>
+              );
+            }
+
+            return (
+              <>
+                <Text
+                  style={[
+                    styles.balanceFairShare,
+                    { color: Colors[colorScheme ?? "light"].textSecondary },
+                  ]}
+                >
+                  Fair share per parent: {formatCurrency(fairShare)}
+                </Text>
+
+                {settlements.length === 0 ? (
+                  <Text
+                    style={[
+                      styles.balanceSettledText,
+                      { color: Colors[colorScheme ?? "light"].tint },
+                    ]}
+                  >
+                    All settled up! 🎉
+                  </Text>
+                ) : (
+                  settlements.map((s) => (
+                    <View
+                      key={`${s.from}-${s.to}`}
+                      style={[
+                        styles.balanceRow,
+                        { borderBottomColor: Colors[colorScheme ?? "light"].border },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.balanceRowText,
+                          { color: Colors[colorScheme ?? "light"].text },
+                        ]}
+                      >
+                        <Text style={styles.balanceRowName}>{s.from}</Text> owes{" "}
+                        <Text style={styles.balanceRowName}>{s.to}</Text>
+                      </Text>
+                      <Text
+                        style={[
+                          styles.balanceRowAmount,
+                          { color: Colors[colorScheme ?? "light"].accent },
+                        ]}
+                      >
+                        {formatCurrency(s.amount)}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </>
+            );
+          })()}
         </View>
 
         <TouchableOpacity
@@ -992,6 +1158,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   currencyButtonText: { fontSize: 13, fontWeight: "600" },
+  balanceHelperText: { fontSize: 14, textAlign: "center", marginTop: 4 },
+  balanceFairShare: { fontSize: 13, textAlign: "center", marginBottom: 12 },
+  balanceSettledText: {
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  balanceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    paddingVertical: 10,
+    width: "100%",
+  },
+  balanceRowText: { fontSize: 14, flex: 1 },
+  balanceRowName: { fontWeight: "700" },
+  balanceRowAmount: { fontSize: 16, fontWeight: "bold", marginLeft: 12 },
   addButton: {
     padding: 16,
     borderRadius: 12,
