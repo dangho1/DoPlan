@@ -23,6 +23,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   Modal,
   ScrollView,
   StyleSheet,
@@ -245,6 +246,19 @@ export default function ChatConversationScreen() {
     });
   };
 
+  // Pressing the keyboard's return key (returnKeyType="send") lands here.
+  // With a message typed, send it (mirrors tapping the Send button, and
+  // keeps the keyboard open for the next message). With nothing typed,
+  // there's nothing to send, so fall back to dismissing the keyboard —
+  // matching the return-key-dismisses convention used elsewhere in the app.
+  const handleSubmitEditing = () => {
+    if (newMessage.trim()) {
+      handleSend();
+    } else {
+      Keyboard.dismiss();
+    }
+  };
+
   const toggleSelectedFriend = (participantId: string) => {
     setSelectedFriendIds((current) =>
       current.includes(participantId)
@@ -402,6 +416,7 @@ export default function ChatConversationScreen() {
           renderItem={renderMessage}
           inverted
           keyExtractor={(item) => item.id}
+          style={styles.messagesListContainer}
           contentContainerStyle={styles.messagesList}
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -430,6 +445,9 @@ export default function ChatConversationScreen() {
             placeholderTextColor={colors.tabIconDefault}
             multiline
             maxLength={1000}
+            returnKeyType="send"
+            blurOnSubmit={false}
+            onSubmitEditing={handleSubmitEditing}
           />
           <TouchableOpacity
             style={[
@@ -623,6 +641,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  messagesListContainer: { flex: 1 },
   messagesList: { padding: 16 },
   messageContainer: { marginVertical: 5, maxWidth: "78%" },
   myMessageContainer: { alignSelf: "flex-end" },
