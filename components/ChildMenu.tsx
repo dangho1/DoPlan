@@ -19,6 +19,7 @@ interface ChildMenuProps {
   onEconomics: () => void;
   onSettings: () => void;
   onActivities: () => void;
+  onContacts: () => void;
   onEdit: () => void;
   // Add more function props as needed for future features
 }
@@ -30,6 +31,7 @@ export default function ChildMenu({
   onEconomics,
   onSettings,
   onActivities,
+  onContacts,
   onEdit,
 }: ChildMenuProps) {
   const colorScheme = useColorScheme();
@@ -47,6 +49,12 @@ export default function ChildMenu({
       title: "Expenses",
       icon: "💰",
       onPress: onEconomics,
+    },
+    {
+      id: "contacts",
+      title: "Contact Book",
+      icon: "📇",
+      onPress: onContacts,
     },
   ];
 

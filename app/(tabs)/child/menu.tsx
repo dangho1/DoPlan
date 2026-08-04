@@ -56,6 +56,9 @@ export default function ChildMenuScreen() {
       onActivities={() =>
         router.push({ pathname: "/child/activities", params: childRouteParams })
       }
+      onContacts={() =>
+        router.push({ pathname: "/child/contacts", params: childRouteParams })
+      }
     />
   );
 }
