@@ -1,4 +1,5 @@
 import { Colors } from "@/constants/Colors";
+import { PARENT_COLOR_PALETTE } from "@/constants/ParentColors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
@@ -190,6 +191,24 @@ export default function ProfileScreen() {
       setEditedProfile(profile);
       setEditMode(true);
     }
+  };
+
+  const handlePickCalendarColor = (color: string) => {
+    if (profile?.color === color) return;
+
+    updateProfile.mutate(
+      { color },
+      {
+        onSuccess: (updated) => {
+          if (editedProfile) setEditedProfile(updated);
+        },
+        onError: () =>
+          Alert.alert(
+            "Error",
+            "Failed to save your calendar colour. Make sure supabase/user_profiles_color.sql has been run.",
+          ),
+      },
+    );
   };
 
   const formatDate = (dateString: string) =>
@@ -395,6 +414,45 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          <View style={styles.infoSection}>
+            <Text
+              style={[styles.sectionTitle, { color: Colors[colorScheme ?? "light"].text }]}
+            >
+              Calendar Colour
+            </Text>
+            <Text style={[styles.note, { color: Colors[colorScheme ?? "light"].text }]}>
+              This colour marks the days you are responsible for on every child
+              calendar you share.
+            </Text>
+            <View style={styles.colorSwatchGrid}>
+              {PARENT_COLOR_PALETTE.map((option) => {
+                const isSelected = displayProfile.color === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.colorSwatch,
+                      { backgroundColor: option.value },
+                      isSelected && [
+                        styles.colorSwatchSelected,
+                        { borderColor: Colors[colorScheme ?? "light"].text },
+                      ],
+                    ]}
+                    onPress={() => handlePickCalendarColor(option.value)}
+                    disabled={updateProfile.isPending}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={`Use ${option.name} as my calendar colour`}
+                  >
+                    {isSelected ? (
+                      <Ionicons name="checkmark" size={20} color="#fff" />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           <View style={styles.actionSection}>
             <TouchableOpacity
               style={[
@@ -490,5 +548,21 @@ const styles = StyleSheet.create({
   value: { fontSize: 16, marginBottom: 4 },
   note: { fontSize: 12, opacity: 0.6, fontStyle: "italic" },
   input: { fontSize: 16, borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 4 },
+  colorSwatchGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 12,
+  },
+  colorSwatch: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  colorSwatchSelected: { borderWidth: 3 },
   actionSection: { gap: 16, paddingTop: 16 },
 });

@@ -4,838 +4,936 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[];
+  | Json[]
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)";
-  };
+    PostgrestVersion: "12.2.3 (519615d)"
+  }
   public: {
     Tables: {
       calendar_events: {
         Row: {
-          activity_name: string | null;
-          child_id: string | null;
-          created_at: string | null;
-          end_time: string;
-          event_type: string | null;
-          id: string;
-          location: string | null;
-          notes: string | null;
-          start_time: string;
-          user_id: string | null;
-        };
+          activity_name: string | null
+          child_id: string | null
+          created_at: string | null
+          end_time: string
+          event_type: string | null
+          id: string
+          location: string | null
+          notes: string | null
+          start_time: string
+          user_id: string | null
+        }
         Insert: {
-          activity_name?: string | null;
-          child_id?: string | null;
-          created_at?: string | null;
-          end_time: string;
-          event_type?: string | null;
-          id?: string;
-          location?: string | null;
-          notes?: string | null;
-          start_time: string;
-          user_id?: string | null;
-        };
+          activity_name?: string | null
+          child_id?: string | null
+          created_at?: string | null
+          end_time: string
+          event_type?: string | null
+          id?: string
+          location?: string | null
+          notes?: string | null
+          start_time: string
+          user_id?: string | null
+        }
         Update: {
-          activity_name?: string | null;
-          child_id?: string | null;
-          created_at?: string | null;
-          end_time?: string;
-          event_type?: string | null;
-          id?: string;
-          location?: string | null;
-          notes?: string | null;
-          start_time?: string;
-          user_id?: string | null;
-        };
+          activity_name?: string | null
+          child_id?: string | null
+          created_at?: string | null
+          end_time?: string
+          event_type?: string | null
+          id?: string
+          location?: string | null
+          notes?: string | null
+          start_time?: string
+          user_id?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "calendar_events_child_id_fkey";
-            columns: ["child_id"];
-            isOneToOne: false;
-            referencedRelation: "children";
-            referencedColumns: ["id"];
+            foreignKeyName: "calendar_events_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "calendar_events_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "calendar_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
-        ];
-      };
+        ]
+      }
       children: {
         Row: {
-          avatar_url: string | null;
-          color: string | null;
-          created_at: string | null;
-          currency: string | null;
-          date_of_birth: string | null;
-          id: string;
-          name: string;
-        };
+          avatar_url: string | null
+          created_at: string | null
+          date_of_birth: string | null
+          id: string
+          name: string
+        }
         Insert: {
-          avatar_url?: string | null;
-          color?: string | null;
-          created_at?: string | null;
-          currency?: string | null;
-          date_of_birth?: string | null;
-          id?: string;
-          name: string;
-        };
+          avatar_url?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          id?: string
+          name: string
+        }
         Update: {
-          avatar_url?: string | null;
-          color?: string | null;
-          created_at?: string | null;
-          currency?: string | null;
-          date_of_birth?: string | null;
-          id?: string;
-          name?: string;
-        };
-        Relationships: [];
-      };
+          avatar_url?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
-          child_id: string;
-          created_at: string;
-          created_by: string | null;
-          email: string | null;
-          id: string;
-          name: string;
-          notes: string | null;
-          phone_number: string | null;
-          role: string | null;
-          updated_at: string;
-        };
+          child_id: string
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone_number: string | null
+          role: string | null
+          updated_at: string
+        }
         Insert: {
-          child_id: string;
-          created_at?: string;
-          created_by?: string | null;
-          email?: string | null;
-          id?: string;
-          name: string;
-          notes?: string | null;
-          phone_number?: string | null;
-          role?: string | null;
-          updated_at?: string;
-        };
+          child_id: string
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone_number?: string | null
+          role?: string | null
+          updated_at?: string
+        }
         Update: {
-          child_id?: string;
-          created_at?: string;
-          created_by?: string | null;
-          email?: string | null;
-          id?: string;
-          name?: string;
-          notes?: string | null;
-          phone_number?: string | null;
-          role?: string | null;
-          updated_at?: string;
-        };
+          child_id?: string
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone_number?: string | null
+          role?: string | null
+          updated_at?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "contacts_child_id_fkey";
-            columns: ["child_id"];
-            isOneToOne: false;
-            referencedRelation: "children";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      custody_schedule_change_requests: {
-        Row: {
-          child_id: string;
-          created_at: string;
-          id: string;
-          proposed_schedules: Json;
-          requested_by: string | null;
-          reviewed_at: string | null;
-          status: string;
-        };
-        Insert: {
-          child_id: string;
-          created_at?: string;
-          id?: string;
-          proposed_schedules?: Json;
-          requested_by?: string | null;
-          reviewed_at?: string | null;
-          status?: string;
-        };
-        Update: {
-          child_id?: string;
-          created_at?: string;
-          id?: string;
-          proposed_schedules?: Json;
-          requested_by?: string | null;
-          reviewed_at?: string | null;
-          status?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "custody_schedule_change_requests_child_id_fkey";
-            columns: ["child_id"];
-            isOneToOne: false;
-            referencedRelation: "children";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      custody_schedules: {
-        Row: {
-          child_id: string;
-          color: string;
-          created_at: string | null;
-          day_time_ranges: Json;
-          days_of_week: number[];
-          id: string;
-          updated_at: string | null;
-          user_id: string;
-          week_pattern: string;
-        };
-        Insert: {
-          child_id: string;
-          color?: string;
-          created_at?: string | null;
-          day_time_ranges?: Json;
-          days_of_week?: number[];
-          id?: string;
-          updated_at?: string | null;
-          user_id: string;
-          week_pattern?: string;
-        };
-        Update: {
-          child_id?: string;
-          color?: string;
-          created_at?: string | null;
-          day_time_ranges?: Json;
-          days_of_week?: number[];
-          id?: string;
-          updated_at?: string | null;
-          user_id?: string;
-          week_pattern?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "custody_schedules_child_id_fkey";
-            columns: ["child_id"];
-            isOneToOne: false;
-            referencedRelation: "children";
-            referencedColumns: ["id"];
+            foreignKeyName: "contacts_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "custody_schedules_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "contacts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
-        ];
-      };
-      expenses: {
-        Row: {
-          amount: number;
-          child_id: string;
-          created_at: string | null;
-          date: string;
-          description: string;
-          id: string;
-          paid: boolean | null;
-          payer: string;
-          updated_at: string | null;
-          user_id: string;
-        };
-        Insert: {
-          amount: number;
-          child_id: string;
-          created_at?: string | null;
-          date: string;
-          description: string;
-          id?: string;
-          paid?: boolean | null;
-          payer: string;
-          updated_at?: string | null;
-          user_id: string;
-        };
-        Update: {
-          amount?: number;
-          child_id?: string;
-          created_at?: string | null;
-          date?: string;
-          description?: string;
-          id?: string;
-          paid?: boolean | null;
-          payer?: string;
-          updated_at?: string | null;
-          user_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "expenses_child_id_fkey";
-            columns: ["child_id"];
-            isOneToOne: false;
-            referencedRelation: "children";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "expenses_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
-          },
-        ];
-      };
-      friendships: {
-        Row: {
-          created_at: string | null;
-          friend_id: string;
-          id: string;
-          status: string;
-          updated_at: string | null;
-          user_id: string;
-        };
-        Insert: {
-          created_at?: string | null;
-          friend_id: string;
-          id?: string;
-          status?: string;
-          updated_at?: string | null;
-          user_id: string;
-        };
-        Update: {
-          created_at?: string | null;
-          friend_id?: string;
-          id?: string;
-          status?: string;
-          updated_at?: string | null;
-          user_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "friendships_friend_id_fkey";
-            columns: ["friend_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
-          },
-          {
-            foreignKeyName: "friendships_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
-          },
-        ];
-      };
-      conversations: {
-        Row: {
-          created_at: string | null;
-          created_by: string;
-          id: string;
-          participant_ids: string[];
-          title: string | null;
-          updated_at: string | null;
-        };
-        Insert: {
-          created_at?: string | null;
-          created_by: string;
-          id?: string;
-          participant_ids: string[];
-          title?: string | null;
-          updated_at?: string | null;
-        };
-        Update: {
-          created_at?: string | null;
-          created_by?: string;
-          id?: string;
-          participant_ids?: string[];
-          title?: string | null;
-          updated_at?: string | null;
-        };
-        Relationships: [];
-      };
+        ]
+      }
       conversation_participants: {
         Row: {
-          conversation_id: string;
-          id: string;
-          joined_at: string | null;
-          user_id: string;
-        };
+          conversation_id: string
+          id: string
+          joined_at: string | null
+          user_id: string
+        }
         Insert: {
-          conversation_id: string;
-          id?: string;
-          joined_at?: string | null;
-          user_id: string;
-        };
+          conversation_id: string
+          id?: string
+          joined_at?: string | null
+          user_id: string
+        }
         Update: {
-          conversation_id?: string;
-          id?: string;
-          joined_at?: string | null;
-          user_id?: string;
-        };
+          conversation_id?: string
+          id?: string
+          joined_at?: string | null
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "conversation_participants_conversation_id_fkey";
-            columns: ["conversation_id"];
-            isOneToOne: false;
-            referencedRelation: "conversations";
-            referencedColumns: ["id"];
+            foreignKeyName: "conversation_participants_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+          {
+            foreignKeyName: "conversation_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          created_at: string | null
+          created_by: string
+          id: string
+          participant_ids: string[]
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by: string
+          id?: string
+          participant_ids: string[]
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string
+          id?: string
+          participant_ids?: string[]
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+        ]
+      }
+      custody_overrides: {
+        Row: {
+          assigned_label: string | null
+          assigned_user_id: string | null
+          child_id: string
+          created_at: string
+          created_by: string | null
+          date: string
+          end_time: string | null
+          id: string
+          note: string | null
+          start_time: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_label?: string | null
+          assigned_user_id?: string | null
+          child_id: string
+          created_at?: string
+          created_by?: string | null
+          date: string
+          end_time?: string | null
+          id?: string
+          note?: string | null
+          start_time?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_label?: string | null
+          assigned_user_id?: string | null
+          child_id?: string
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          end_time?: string | null
+          id?: string
+          note?: string | null
+          start_time?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custody_overrides_assigned_user_id_fkey"
+            columns: ["assigned_user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+          {
+            foreignKeyName: "custody_overrides_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_overrides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+        ]
+      }
+      custody_schedule_change_requests: {
+        Row: {
+          child_id: string
+          created_at: string
+          id: string
+          proposed_schedules: Json
+          requested_by: string | null
+          reviewed_at: string | null
+          status: string
+        }
+        Insert: {
+          child_id: string
+          created_at?: string
+          id?: string
+          proposed_schedules?: Json
+          requested_by?: string | null
+          reviewed_at?: string | null
+          status?: string
+        }
+        Update: {
+          child_id?: string
+          created_at?: string
+          id?: string
+          proposed_schedules?: Json
+          requested_by?: string | null
+          reviewed_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custody_schedule_change_requests_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_schedule_change_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+        ]
+      }
+      custody_schedules: {
+        Row: {
+          child_id: string
+          color: string
+          created_at: string | null
+          day_time_ranges: Json
+          days_of_week: number[]
+          id: string
+          updated_at: string | null
+          user_id: string
+          week_pattern: string
+        }
+        Insert: {
+          child_id: string
+          color?: string
+          created_at?: string | null
+          day_time_ranges?: Json
+          days_of_week?: number[]
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          week_pattern?: string
+        }
+        Update: {
+          child_id?: string
+          color?: string
+          created_at?: string | null
+          day_time_ranges?: Json
+          days_of_week?: number[]
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          week_pattern?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custody_schedules_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_schedules_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          amount: number
+          child_id: string
+          created_at: string | null
+          date: string
+          description: string
+          id: string
+          payer: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          child_id: string
+          created_at?: string | null
+          date: string
+          description: string
+          id?: string
+          payer: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          child_id?: string
+          created_at?: string | null
+          date?: string
+          description?: string
+          id?: string
+          payer?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+        ]
+      }
+      friendships: {
+        Row: {
+          created_at: string | null
+          friend_id: string
+          id: string
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          friend_id: string
+          id?: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          friend_id?: string
+          id?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friendships_friend_id_fkey"
+            columns: ["friend_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+          {
+            foreignKeyName: "friendships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+        ]
+      }
       messages: {
         Row: {
-          content: string;
-          conversation_id: string | null;
-          created_at: string | null;
-          id: string;
-          read: boolean | null;
-          receiver_id: string;
-          sender_id: string;
-          updated_at: string | null;
-        };
+          content: string
+          conversation_id: string | null
+          created_at: string | null
+          id: string
+          read: boolean | null
+          receiver_id: string
+          sender_id: string
+          updated_at: string | null
+        }
         Insert: {
-          content: string;
-          conversation_id?: string | null;
-          created_at?: string | null;
-          id?: string;
-          read?: boolean | null;
-          receiver_id: string;
-          sender_id: string;
-          updated_at?: string | null;
-        };
+          content: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          read?: boolean | null
+          receiver_id: string
+          sender_id: string
+          updated_at?: string | null
+        }
         Update: {
-          content?: string;
-          conversation_id?: string | null;
-          created_at?: string | null;
-          id?: string;
-          read?: boolean | null;
-          receiver_id?: string;
-          sender_id?: string;
-          updated_at?: string | null;
-        };
+          content?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          read?: boolean | null
+          receiver_id?: string
+          sender_id?: string
+          updated_at?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "messages_conversation_id_fkey";
-            columns: ["conversation_id"];
-            isOneToOne: false;
-            referencedRelation: "conversations";
-            referencedColumns: ["id"];
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "messages_receiver_id_fkey";
-            columns: ["receiver_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "messages_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
           {
-            foreignKeyName: "messages_sender_id_fkey";
-            columns: ["sender_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
-        ];
-      };
+        ]
+      }
       recurring_activities: {
         Row: {
-          activity_name: string;
-          activity_type: string | null;
-          child_id: string;
-          color: string | null;
-          created_at: string | null;
-          days_of_week: number[];
-          end_time: string;
-          id: string;
-          is_active: boolean | null;
-          location: string | null;
-          notes: string | null;
-          start_time: string;
-          updated_at: string | null;
-          user_id: string;
-        };
+          activity_name: string
+          activity_type: string | null
+          child_id: string
+          color: string | null
+          created_at: string | null
+          days_of_week: number[]
+          end_time: string
+          id: string
+          is_active: boolean | null
+          location: string | null
+          notes: string | null
+          start_time: string
+          updated_at: string | null
+          user_id: string
+        }
         Insert: {
-          activity_name: string;
-          activity_type?: string | null;
-          child_id: string;
-          color?: string | null;
-          created_at?: string | null;
-          days_of_week: number[];
-          end_time: string;
-          id?: string;
-          is_active?: boolean | null;
-          location?: string | null;
-          notes?: string | null;
-          start_time: string;
-          updated_at?: string | null;
-          user_id: string;
-        };
+          activity_name: string
+          activity_type?: string | null
+          child_id: string
+          color?: string | null
+          created_at?: string | null
+          days_of_week: number[]
+          end_time: string
+          id?: string
+          is_active?: boolean | null
+          location?: string | null
+          notes?: string | null
+          start_time: string
+          updated_at?: string | null
+          user_id: string
+        }
         Update: {
-          activity_name?: string;
-          activity_type?: string | null;
-          child_id?: string;
-          color?: string | null;
-          created_at?: string | null;
-          days_of_week?: number[];
-          end_time?: string;
-          id?: string;
-          is_active?: boolean | null;
-          location?: string | null;
-          notes?: string | null;
-          start_time?: string;
-          updated_at?: string | null;
-          user_id?: string;
-        };
+          activity_name?: string
+          activity_type?: string | null
+          child_id?: string
+          color?: string | null
+          created_at?: string | null
+          days_of_week?: number[]
+          end_time?: string
+          id?: string
+          is_active?: boolean | null
+          location?: string | null
+          notes?: string | null
+          start_time?: string
+          updated_at?: string | null
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "recurring_activities_child_id_fkey";
-            columns: ["child_id"];
-            isOneToOne: false;
-            referencedRelation: "children";
-            referencedColumns: ["id"];
+            foreignKeyName: "recurring_activities_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "recurring_activities_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "recurring_activities_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
-        ];
-      };
+        ]
+      }
       user_children: {
         Row: {
-          child_id: string;
-          created_at: string | null;
-          id: string;
-          user_id: string;
-        };
+          child_id: string
+          created_at: string | null
+          id: string
+          user_id: string
+        }
         Insert: {
-          child_id: string;
-          created_at?: string | null;
-          id?: string;
-          user_id: string;
-        };
+          child_id: string
+          created_at?: string | null
+          id?: string
+          user_id: string
+        }
         Update: {
-          child_id?: string;
-          created_at?: string | null;
-          id?: string;
-          user_id?: string;
-        };
+          child_id?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "user_children_child_id_fkey";
-            columns: ["child_id"];
-            isOneToOne: false;
-            referencedRelation: "children";
-            referencedColumns: ["id"];
+            foreignKeyName: "user_children_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "user_children_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "user_children_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
-        ];
-      };
+        ]
+      }
       user_profiles: {
         Row: {
-          age: number;
-          avatar_url: string | null;
-          birth_date: string;
-          created_at: string | null;
-          display_name: string;
-          email: string;
-          first_name: string;
-          id: string;
-          is_online: boolean | null;
-          is_searchable: boolean | null;
-          last_name: string;
-          last_seen: string | null;
-          phone_number: string | null;
-          updated_at: string | null;
-          user_id: string;
-          username: string;
-        };
+          age: number
+          avatar_url: string | null
+          birth_date: string
+          color: string | null
+          created_at: string | null
+          display_name: string
+          email: string
+          first_name: string
+          id: string
+          is_online: boolean | null
+          is_searchable: boolean | null
+          last_name: string
+          last_seen: string | null
+          phone_number: string | null
+          updated_at: string | null
+          user_id: string
+          username: string
+        }
         Insert: {
-          age: number;
-          avatar_url?: string | null;
-          birth_date: string;
-          created_at?: string | null;
-          display_name: string;
-          email: string;
-          first_name: string;
-          id?: string;
-          is_online?: boolean | null;
-          is_searchable?: boolean | null;
-          last_name: string;
-          last_seen?: string | null;
-          phone_number?: string | null;
-          updated_at?: string | null;
-          user_id: string;
-          username: string;
-        };
+          age: number
+          avatar_url?: string | null
+          birth_date: string
+          color?: string | null
+          created_at?: string | null
+          display_name: string
+          email: string
+          first_name: string
+          id?: string
+          is_online?: boolean | null
+          is_searchable?: boolean | null
+          last_name: string
+          last_seen?: string | null
+          phone_number?: string | null
+          updated_at?: string | null
+          user_id: string
+          username: string
+        }
         Update: {
-          age?: number;
-          avatar_url?: string | null;
-          birth_date?: string;
-          created_at?: string | null;
-          display_name?: string;
-          email?: string;
-          first_name?: string;
-          id?: string;
-          is_online?: boolean | null;
-          is_searchable?: boolean | null;
-          last_name?: string;
-          last_seen?: string | null;
-          phone_number?: string | null;
-          updated_at?: string | null;
-          user_id?: string;
-          username?: string;
-        };
+          age?: number
+          avatar_url?: string | null
+          birth_date?: string
+          color?: string | null
+          created_at?: string | null
+          display_name?: string
+          email?: string
+          first_name?: string
+          id?: string
+          is_online?: boolean | null
+          is_searchable?: boolean | null
+          last_name?: string
+          last_seen?: string | null
+          phone_number?: string | null
+          updated_at?: string | null
+          user_id?: string
+          username?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "user_profiles_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: true;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "user_profiles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
-        ];
-      };
-    };
+        ]
+      }
+    }
     Views: {
       child_guardians: {
         Row: {
-          child_id: string | null;
-          created_at: string | null;
-          guardian_name: string | null;
-          user_id: string | null;
-        };
+          child_id: string | null
+          created_at: string | null
+          guardian_name: string | null
+          user_id: string | null
+        }
         Insert: {
-          child_id?: string | null;
-          created_at?: string | null;
-          guardian_name?: never;
-          user_id?: string | null;
-        };
+          child_id?: string | null
+          created_at?: string | null
+          guardian_name?: never
+          user_id?: string | null
+        }
         Update: {
-          child_id?: string | null;
-          created_at?: string | null;
-          guardian_name?: never;
-          user_id?: string | null;
-        };
+          child_id?: string | null
+          created_at?: string | null
+          guardian_name?: never
+          user_id?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "user_children_child_id_fkey";
-            columns: ["child_id"];
-            isOneToOne: false;
-            referencedRelation: "children";
-            referencedColumns: ["id"];
+            foreignKeyName: "user_children_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "user_children_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "user_children_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
-        ];
-      };
+        ]
+      }
       conversation_list: {
         Row: {
-          conversation_created_at: string | null;
-          conversation_id: string | null;
-          created_by: string | null;
-          last_message: string | null;
-          last_message_id: string | null;
-          last_message_read: boolean | null;
-          last_message_sender_id: string | null;
-          last_message_time: string | null;
-          participant_count: number | null;
-          participant_ids: string[] | null;
-          sender_avatar: string | null;
-          sender_email: string | null;
-          sender_name: string | null;
-          title: string | null;
-        };
-        Relationships: [];
-      };
-      friendships_with_profiles: {
-        Row: {
-          friend_avatar_url: string | null;
-          friend_display_name: string | null;
-          friend_id: string | null;
-          friendship_created_at: string | null;
-          friendship_id: string | null;
-          status: string | null;
-          user_avatar_url: string | null;
-          user_display_name: string | null;
-          user_id: string | null;
-        };
+          content: string | null
+          conversation_key: string | null
+          created_at: string | null
+          id: string | null
+          read: boolean | null
+          receiver_avatar: string | null
+          receiver_email: string | null
+          receiver_id: string | null
+          receiver_name: string | null
+          sender_avatar: string | null
+          sender_email: string | null
+          sender_id: string | null
+          sender_name: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "friendships_friend_id_fkey";
-            columns: ["friend_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "messages_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
           {
-            foreignKeyName: "friendships_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "users_with_profiles";
-            referencedColumns: ["auth_id"];
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
           },
-        ];
-      };
+        ]
+      }
+      friendships_with_profiles: {
+        Row: {
+          friend_avatar_url: string | null
+          friend_display_name: string | null
+          friend_id: string | null
+          friendship_created_at: string | null
+          friendship_id: string | null
+          status: string | null
+          user_avatar_url: string | null
+          user_display_name: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friendships_friend_id_fkey"
+            columns: ["friend_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+          {
+            foreignKeyName: "friendships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_with_profiles"
+            referencedColumns: ["auth_id"]
+          },
+        ]
+      }
       users_with_profiles: {
         Row: {
-          age: number | null;
-          auth_created_at: string | null;
-          auth_email: string | null;
-          auth_id: string | null;
-          avatar_url: string | null;
-          birth_date: string | null;
-          display_name: string | null;
-          first_name: string | null;
-          is_online: boolean | null;
-          is_searchable: boolean | null;
-          last_name: string | null;
-          last_seen: string | null;
-          phone_number: string | null;
-          profile_created_at: string | null;
-          profile_id: string | null;
-          profile_updated_at: string | null;
-        };
-        Relationships: [];
-      };
-    };
+          age: number | null
+          auth_created_at: string | null
+          auth_email: string | null
+          auth_id: string | null
+          avatar_url: string | null
+          birth_date: string | null
+          display_name: string | null
+          first_name: string | null
+          is_online: boolean | null
+          is_searchable: boolean | null
+          last_name: string | null
+          last_seen: string | null
+          phone_number: string | null
+          profile_created_at: string | null
+          profile_id: string | null
+          profile_updated_at: string | null
+        }
+        Relationships: []
+      }
+    }
     Functions: {
       accept_friend_request: {
-        Args: { friendship_uuid: string };
-        Returns: Json;
-      };
-      decline_friend_request: {
-        Args: { friendship_uuid: string };
-        Returns: Json;
-      };
-      delete_my_account: { Args: never; Returns: undefined };
-      delete_child: { Args: { child_uuid: string }; Returns: undefined };
-      email_exists_for_reset: {
-        Args: { input_email: string };
-        Returns: boolean;
-      };
-      generate_unique_username: {
-        Args: {
-          p_display_name: string;
-          p_email: string;
-          p_first_name: string;
-          p_last_name: string;
-          p_preferred?: string;
-          p_user_id: string;
-        };
-        Returns: string;
-      };
+        Args: { friendship_uuid: string }
+        Returns: Json
+      }
+      add_conversation_participant: {
+        Args: { p_conversation_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      add_conversation_participants: {
+        Args: { p_conversation_id: string; p_user_ids: string[] }
+        Returns: undefined
+      }
       create_conversation: {
         Args: {
-          p_created_by: string;
-          p_participant_ids: string[];
-          p_title?: string;
-        };
-        Returns: string;
-      };
-      add_conversation_participant: {
-        Args: { p_conversation_id: string; p_user_id: string };
-        Returns: undefined;
-      };
-      add_conversation_participants: {
-        Args: { p_conversation_id: string; p_user_ids: string[] };
-        Returns: undefined;
-      };
-      remove_conversation_participant: {
-        Args: { p_conversation_id: string; p_user_id: string };
-        Returns: undefined;
-      };
-      leave_conversation: {
-        Args: { p_conversation_id: string };
-        Returns: undefined;
-      };
+          p_created_by: string
+          p_participant_ids: string[]
+          p_title?: string
+        }
+        Returns: string
+      }
+      decline_friend_request: {
+        Args: { friendship_uuid: string }
+        Returns: Json
+      }
+      delete_child: { Args: { child_uuid: string }; Returns: undefined }
+      delete_my_account: { Args: never; Returns: undefined }
+      email_exists_for_reset: {
+        Args: { input_email: string }
+        Returns: boolean
+      }
+      generate_unique_username: {
+        Args: {
+          p_display_name: string
+          p_email: string
+          p_first_name: string
+          p_last_name: string
+          p_preferred?: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       get_or_create_conversation: {
-        Args: { user1_uuid: string; user2_uuid: string };
-        Returns: string;
-      };
+        Args: { user1_uuid: string; user2_uuid: string }
+        Returns: string
+      }
       get_or_create_direct_channel: {
-        Args: { user1_id: string; user2_id: string };
-        Returns: string;
-      };
+        Args: { user1_id: string; user2_id: string }
+        Returns: string
+      }
       get_or_create_direct_conversation: {
-        Args: { user1_id: string; user2_id: string };
-        Returns: string;
-      };
+        Args: { user1_id: string; user2_id: string }
+        Returns: string
+      }
       get_user_friends: {
-        Args: { current_user_id: string };
+        Args: { current_user_id: string }
         Returns: {
-          avatar_url: string;
-          channel_id: string;
-          display_name: string;
-          email: string;
-          friend_id: string;
-        }[];
-      };
+          avatar_url: string
+          channel_id: string
+          display_name: string
+          email: string
+          friend_id: string
+        }[]
+      }
       is_placeholder_display_name: {
-        Args: { input_text: string };
-        Returns: boolean;
-      };
-      normalize_username: { Args: { input_text: string }; Returns: string };
+        Args: { input_text: string }
+        Returns: boolean
+      }
+      leave_conversation: {
+        Args: { p_conversation_id: string }
+        Returns: undefined
+      }
+      normalize_username: { Args: { input_text: string }; Returns: string }
+      remove_conversation_participant: {
+        Args: { p_conversation_id: string; p_user_id: string }
+        Returns: undefined
+      }
       search_users_by_email: {
-        Args: { current_user_id: string; search_email: string };
+        Args: { current_user_id: string; search_email: string }
         Returns: {
-          avatar_url: string;
-          display_name: string;
-          email: string;
-          user_id: string;
-        }[];
-      };
-      send_friend_request: { Args: { friend_email: string }; Returns: Json };
-    };
+          avatar_url: string
+          display_name: string
+          email: string
+          user_id: string
+        }[]
+      }
+      send_friend_request: { Args: { friend_email: string }; Returns: Json }
+    }
     Enums: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
-};
+      [_ in never]: never
+    }
+  }
+}
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<
-  keyof Database,
-  "public"
->];
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R;
+      Row: infer R
     }
     ? R
     : never
@@ -843,98 +941,98 @@ export type Tables<
         DefaultSchema["Views"])
     ? (DefaultSchema["Tables"] &
         DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R;
+        Row: infer R
       }
       ? R
       : never
-    : never;
+    : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I;
+      Insert: infer I
     }
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I;
+        Insert: infer I
       }
       ? I
       : never
-    : never;
+    : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U;
+      Update: infer U
     }
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U;
+        Update: infer U
       }
       ? U
       : never
-    : never;
+    : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never;
+    : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never;
+    : never
 
 export const Constants = {
   public: {
     Enums: {},
   },
-} as const;
+} as const
