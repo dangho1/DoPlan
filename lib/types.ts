@@ -12,6 +12,10 @@ export type RecurringActivity = Tables<'recurring_activities'>
 export type RecurringActivityInsert = TablesInsert<'recurring_activities'>
 export type RecurringActivityUpdate = TablesUpdate<'recurring_activities'>
 
+export type Contact = Tables<'contacts'>
+export type ContactInsert = TablesInsert<'contacts'>
+export type ContactUpdate = TablesUpdate<'contacts'>
+
 export type Message = Tables<'messages'>
 export type MessageInsert = TablesInsert<'messages'>
 

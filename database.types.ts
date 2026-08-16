@@ -92,6 +92,53 @@ export type Database = {
         };
         Relationships: [];
       };
+      contacts: {
+        Row: {
+          child_id: string;
+          created_at: string;
+          created_by: string | null;
+          email: string | null;
+          id: string;
+          name: string;
+          notes: string | null;
+          phone_number: string | null;
+          role: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          child_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          email?: string | null;
+          id?: string;
+          name: string;
+          notes?: string | null;
+          phone_number?: string | null;
+          role?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          child_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          email?: string | null;
+          id?: string;
+          name?: string;
+          notes?: string | null;
+          phone_number?: string | null;
+          role?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "contacts_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       custody_schedule_change_requests: {
         Row: {
           child_id: string;

@@ -12,6 +12,7 @@ export default function ChildLayout() {
       <Stack.Screen name="child-settings" />
       <Stack.Screen name="calendar" />
       <Stack.Screen name="economics" />
+      <Stack.Screen name="contacts" />
       <Stack.Screen name="settings" />
     </Stack>
   )
