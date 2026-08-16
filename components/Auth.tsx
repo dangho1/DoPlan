@@ -4,6 +4,7 @@ import AuthForm from "../app/(auth)/login";
 import NewPassword from "../app/(auth)/new-password";
 import ResetPassword from "../app/(auth)/reset-password";
 import WelcomeScreen from "../app/(auth)/welcome";
+import { isRecoveryType, parseAuthLink } from "../lib/authLinking";
 import { supabase } from "../lib/supabase";
 
 interface AuthProps {
@@ -19,34 +20,6 @@ export default function Auth({
     "welcome" | "login" | "signup" | "reset-password" | "new-password"
   >("welcome");
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
-
-  const parseAuthLink = (url: string) => {
-    let accessToken: string | null = null;
-    let refreshToken: string | null = null;
-    let type: string | null = null;
-
-    if (url.includes("#")) {
-      const hashPart = url.split("#")[1];
-      const hashParams = new URLSearchParams(hashPart);
-      accessToken = hashParams.get("access_token");
-      refreshToken = hashParams.get("refresh_token");
-      type = hashParams.get("type");
-    } else {
-      const urlObj = new URL(url.replace("doplan://", "http://doplan/"));
-      accessToken = urlObj.searchParams.get("access_token");
-      refreshToken = urlObj.searchParams.get("refresh_token");
-      type = urlObj.searchParams.get("type");
-    }
-
-    return {
-      accessToken,
-      refreshToken,
-      type: type?.toLowerCase() ?? null,
-    };
-  };
-
-  const isRecoveryType = (type: string | null) =>
-    type === "recovery" || type === "password_recovery";
 
   useEffect(() => {
     // If forceShow is true, we're being shown for password recovery
