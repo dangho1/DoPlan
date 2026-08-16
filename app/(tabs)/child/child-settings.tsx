@@ -1,3 +1,4 @@
+import { CHILD_COLOR_SWATCHES } from "@/constants/ChildColors";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -77,8 +78,10 @@ export default function ChildSettings({
   const [editedBirthDate, setEditedBirthDate] = useState("");
   const [childBirthDate, setChildBirthDate] = useState("");
   const [childAvatarUrl, setChildAvatarUrl] = useState<string | null>(null);
+  const [childColor, setChildColor] = useState<string | null>(null);
   const [savingChild, setSavingChild] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [savingColor, setSavingColor] = useState(false);
 
   const updateChildCache = (updates: Partial<Child>) => {
     queryClient.setQueryData<Child>(["child", resolvedChildId], (current) =>
@@ -216,7 +219,7 @@ export default function ChildSettings({
     try {
       const { data, error } = await supabase
         .from("children")
-        .select("name, date_of_birth, avatar_url")
+        .select("name, date_of_birth, avatar_url, color")
         .eq("id", resolvedChildId)
         .single();
 
@@ -228,9 +231,39 @@ export default function ChildSettings({
         setChildBirthDate(data.date_of_birth || "");
         setEditedBirthDate(data.date_of_birth || "");
         setChildAvatarUrl(data.avatar_url || null);
+        setChildColor(data.color || null);
       }
     } catch (error) {
       console.error("Error fetching child info:", error);
+    }
+  };
+
+  const handleSelectChildColor = async (color: string | null) => {
+    if (savingColor || color === childColor) return;
+
+    setSavingColor(true);
+    try {
+      const { error } = await supabase
+        .from("children")
+        .update({ color })
+        .eq("id", resolvedChildId);
+
+      if (error) {
+        console.error("Error updating child color:", error);
+        Alert.alert("Error", "Failed to update calendar color.");
+        return;
+      }
+
+      setChildColor(color);
+      updateChildCache({ color });
+      if (onChildUpdated) {
+        onChildUpdated();
+      }
+    } catch (error) {
+      console.error("Error updating child color:", error);
+      Alert.alert("Error", "Failed to update calendar color.");
+    } finally {
+      setSavingColor(false);
     }
   };
 
@@ -820,6 +853,84 @@ export default function ChildSettings({
           </View>
         </View>
 
+        {/* Calendar Color Section */}
+        <View style={styles.section}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: Colors[colorScheme ?? "light"].text },
+            ]}
+          >
+            Calendar Color
+          </Text>
+          <Text
+            style={[
+              styles.sectionDescription,
+              { color: Colors[colorScheme ?? "light"].textSecondary },
+            ]}
+          >
+            Pick a color to identify {currentChildName} across the calendar.
+            Swatches are chosen to stay distinguishable for colorblind users
+            too. Leave on Auto to use the automatically assigned color.
+          </Text>
+          <View style={styles.colorSwatchRow}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Use automatically assigned calendar color"
+              accessibilityState={{ selected: childColor === null }}
+              style={[
+                styles.colorSwatch,
+                styles.colorSwatchAuto,
+                {
+                  borderColor:
+                    childColor === null
+                      ? Colors[colorScheme ?? "light"].text
+                      : Colors[colorScheme ?? "light"].border,
+                  backgroundColor:
+                    Colors[colorScheme ?? "light"].inputBackground,
+                },
+              ]}
+              onPress={() => handleSelectChildColor(null)}
+              disabled={savingColor}
+            >
+              <Text
+                style={[
+                  styles.colorSwatchAutoText,
+                  { color: Colors[colorScheme ?? "light"].textSecondary },
+                ]}
+              >
+                Auto
+              </Text>
+            </TouchableOpacity>
+            {CHILD_COLOR_SWATCHES.map((swatch) => {
+              const isSelected = childColor === swatch;
+              return (
+                <TouchableOpacity
+                  key={swatch}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Set calendar color to ${swatch}`}
+                  accessibilityState={{ selected: isSelected }}
+                  style={[
+                    styles.colorSwatch,
+                    {
+                      backgroundColor: swatch,
+                      borderColor: isSelected
+                        ? Colors[colorScheme ?? "light"].text
+                        : "transparent",
+                    },
+                  ]}
+                  onPress={() => handleSelectChildColor(swatch)}
+                  disabled={savingColor}
+                >
+                  {isSelected ? (
+                    <Ionicons name="checkmark" size={18} color="#fff" />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         {/* Parent Management Section */}
         <View style={styles.section}>
           <Text
@@ -1168,6 +1279,26 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  colorSwatchRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  colorSwatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  colorSwatchAuto: {
+    borderStyle: "dashed",
+  },
+  colorSwatchAutoText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   addParentContainer: {
     flexDirection: "row",

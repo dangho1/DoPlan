@@ -28,7 +28,9 @@ export default function ChildMenuScreen() {
     name: childName || "Unknown Child",
     date_of_birth: childDob,
     avatar_url: childAvatarUrl,
+    color: null,
     created_at: "",
+    currency: null,
   };
   const child = currentChild ?? fallbackChild;
 
@@ -55,6 +57,9 @@ export default function ChildMenuScreen() {
       }
       onActivities={() =>
         router.push({ pathname: "/child/activities", params: childRouteParams })
+      }
+      onContacts={() =>
+        router.push({ pathname: "/child/contacts", params: childRouteParams })
       }
     />
   );
