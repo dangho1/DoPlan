@@ -73,6 +73,7 @@ export type Database = {
           avatar_url: string | null
           color: string | null
           created_at: string | null
+          currency: string | null
           date_of_birth: string | null
           id: string
           name: string
@@ -81,6 +82,7 @@ export type Database = {
           avatar_url?: string | null
           color?: string | null
           created_at?: string | null
+          currency?: string | null
           date_of_birth?: string | null
           id?: string
           name: string
@@ -89,6 +91,7 @@ export type Database = {
           avatar_url?: string | null
           color?: string | null
           created_at?: string | null
+          currency?: string | null
           date_of_birth?: string | null
           id?: string
           name?: string
@@ -388,6 +391,7 @@ export type Database = {
           date: string
           description: string
           id: string
+          paid: boolean | null
           payer: string
           updated_at: string | null
           user_id: string
@@ -399,6 +403,7 @@ export type Database = {
           date: string
           description: string
           id?: string
+          paid?: boolean | null
           payer: string
           updated_at?: string | null
           user_id: string
@@ -410,6 +415,7 @@ export type Database = {
           date?: string
           description?: string
           id?: string
+          paid?: boolean | null
           payer?: string
           updated_at?: string | null
           user_id?: string

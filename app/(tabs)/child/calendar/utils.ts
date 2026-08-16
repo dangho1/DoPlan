@@ -7,6 +7,28 @@ import type {
     WeekPattern,
 } from "./types";
 
+export const parseDayTimeRanges = (value: unknown): Record<number, DayTimeRange> => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return {};
+    }
+
+    const result: Record<number, DayTimeRange> = {};
+    for (const [key, range] of Object.entries(value as Record<string, unknown>)) {
+        const dayOfWeek = Number(key);
+        if (
+            Number.isNaN(dayOfWeek) ||
+            !range ||
+            typeof range !== "object" ||
+            typeof (range as any).start !== "string" ||
+            typeof (range as any).end !== "string"
+        ) {
+            continue;
+        }
+        result[dayOfWeek] = { start: (range as any).start, end: (range as any).end };
+    }
+    return result;
+};
+
 export const getDayOfWeekMondayIndex = (date: Date) => (date.getDay() + 6) % 7;
 
 export const getDaysInMonth = (date: Date): CalendarDayCell[] => {

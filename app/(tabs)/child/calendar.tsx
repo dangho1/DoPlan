@@ -58,6 +58,7 @@ import {
   getDaysInMonth,
   getShiftedDate,
   getWeekPatternForDate,
+  parseDayTimeRanges,
   parseLocalDateInput,
   parseMinutes,
 } from "./calendar/utils";
@@ -522,7 +523,15 @@ export default function Calendar({
         return;
       }
 
-      setEvents(data || []);
+      setEvents(
+        (data || []).map((event) => ({
+          ...event,
+          activity_name: event.activity_name ?? "",
+          child_id: event.child_id ?? "",
+          notes: event.notes ?? undefined,
+          location: event.location ?? undefined,
+        })),
+      );
     } catch (error) {
       console.error("Error fetching events:", error);
     }
@@ -556,15 +565,11 @@ export default function Calendar({
         data?.map((schedule, index) => ({
           ...schedule,
           parent_name: `Parent ${index + 1}`, // Simple name since we don't have profile table
-          day_time_ranges:
-            schedule.day_time_ranges &&
-            typeof schedule.day_time_ranges === "object"
-              ? schedule.day_time_ranges
-              : {},
-          week_pattern:
-            schedule.week_pattern === "odd" || schedule.week_pattern === "even"
-              ? schedule.week_pattern
-              : "all",
+          day_time_ranges: parseDayTimeRanges(schedule.day_time_ranges),
+          week_pattern: (schedule.week_pattern === "odd" ||
+          schedule.week_pattern === "even"
+            ? schedule.week_pattern
+            : "all") as WeekPattern,
         })) || [];
 
       setCustodySchedules(schedulesWithNames);
@@ -666,7 +671,12 @@ export default function Calendar({
         return;
       }
 
-      setRecurringActivities(data || []);
+      setRecurringActivities(
+        (data || []).map((activity) => ({
+          ...activity,
+          color: activity.color ?? theme.tint,
+        })),
+      );
     } catch (error) {
       console.error("Error fetching recurring activities:", error);
     }
@@ -2956,8 +2966,6 @@ export default function Calendar({
                   autoComplete="off"
                   textContentType="none"
                   smartInsertDelete={false}
-                  smartDashesType="no"
-                  smartQuotesType="no"
                   returnKeyType="done"
                   onSubmitEditing={dismissAddEventKeyboard}
                 />
@@ -2996,8 +3004,6 @@ export default function Calendar({
                 autoComplete="off"
                 textContentType="none"
                 smartInsertDelete={false}
-                smartDashesType="no"
-                smartQuotesType="no"
                 returnKeyType="done"
                 onSubmitEditing={dismissAddEventKeyboard}
                 blurOnSubmit

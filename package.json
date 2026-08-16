@@ -9,7 +9,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "codegen": "supabase gen types typescript --project-id ifhmpedzbaoehjrevvlr --schema public > database.types.ts"
+    "codegen": "supabase gen types typescript --project-id ifhmpedzbaoehjrevvlr --schema public > database.types.ts",
+    "type-check": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

@@ -14,18 +14,16 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  findNodeHandle,
+  FocusEvent,
   Image,
   Keyboard,
-  NativeSyntheticEvent,
+  NativeMethods,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TextInputFocusEventData,
   TouchableOpacity,
-  UIManager,
   View,
 } from "react-native";
 import { supabase } from "../../lib/supabase";
@@ -46,7 +44,7 @@ export default function ProfileScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollViewRef = React.useRef<ScrollView>(null);
   const scrollOffsetRef = React.useRef(0);
-  const pendingFocusNodeRef = React.useRef<number | null>(null);
+  const pendingFocusTargetRef = React.useRef<NativeMethods | null>(null);
 
   const getAvatarFileExtension = (asset: ImagePicker.ImagePickerAsset) => {
     const extensionFromName = asset.fileName?.split(".").pop()?.toLowerCase();
@@ -56,12 +54,12 @@ export default function ProfileScreen() {
     return "jpg";
   };
 
-  const scrollNodeToTarget = (nodeHandle: number) => {
+  const scrollTargetIntoView = (target: NativeMethods) => {
     const windowHeight = Dimensions.get("window").height;
     const keyboardTop = keyboardHeight > 0 ? windowHeight - keyboardHeight : windowHeight;
     const targetY = Math.min(windowHeight * 0.34, keyboardTop * 0.52);
 
-    UIManager.measure(nodeHandle, (_x, _y, _width, _height, _px, py) => {
+    target.measure((_x, _y, _width, _height, _px, py) => {
       const delta = py - targetY;
       if (delta > 4) {
         scrollViewRef.current?.scrollTo({
@@ -72,15 +70,14 @@ export default function ProfileScreen() {
     });
   };
 
-  const handleInputFocus = (event: NativeSyntheticEvent<TextInputFocusEventData>) => {
-    const nodeHandle = findNodeHandle(event.target);
-    if (!nodeHandle) return;
+  const handleInputFocus = (event: FocusEvent) => {
+    const target = event.target;
 
     if (keyboardHeight > 0) {
-      setTimeout(() => scrollNodeToTarget(nodeHandle), 20);
+      setTimeout(() => scrollTargetIntoView(target), 20);
       return;
     }
-    pendingFocusNodeRef.current = nodeHandle;
+    pendingFocusTargetRef.current = target;
   };
 
   useEffect(() => {
@@ -90,15 +87,15 @@ export default function ProfileScreen() {
     const showSub = Keyboard.addListener(showEvent, (event) => {
       const nextHeight = Math.max(0, event.endCoordinates.height);
       setKeyboardHeight(nextHeight);
-      if (pendingFocusNodeRef.current) {
-        const nodeHandle = pendingFocusNodeRef.current;
-        pendingFocusNodeRef.current = null;
-        setTimeout(() => scrollNodeToTarget(nodeHandle), 20);
+      if (pendingFocusTargetRef.current) {
+        const target = pendingFocusTargetRef.current;
+        pendingFocusTargetRef.current = null;
+        setTimeout(() => scrollTargetIntoView(target), 20);
       }
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);
-      pendingFocusNodeRef.current = null;
+      pendingFocusTargetRef.current = null;
     });
 
     return () => {
