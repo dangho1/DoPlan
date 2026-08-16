@@ -347,6 +347,8 @@ export default function ProfileScreen() {
                     }
                     onFocus={handleInputFocus}
                     placeholder={`Enter ${label.toLowerCase()}`}
+                    autoCorrect={false}
+                    spellCheck={false}
                   />
                 ) : (
                   <Text

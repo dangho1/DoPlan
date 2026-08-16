@@ -450,6 +450,7 @@ export default function AuthForm({
                     onFocus={handleInputFocus}
                     placeholder=""
                     autoCapitalize="words"
+                    autoCorrect={false}
                   />
                 </View>
                 <View style={[styles.inputContainer, styles.halfWidth]}>
@@ -475,6 +476,7 @@ export default function AuthForm({
                     onFocus={handleInputFocus}
                     placeholder=""
                     autoCapitalize="words"
+                    autoCorrect={false}
                   />
                 </View>
               </View>
@@ -558,6 +560,7 @@ export default function AuthForm({
               onFocus={handleInputFocus}
               placeholder=""
               autoCapitalize="none"
+              autoCorrect={false}
               keyboardType="email-address"
             />
           </View>

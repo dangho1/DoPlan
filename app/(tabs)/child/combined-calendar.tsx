@@ -78,7 +78,7 @@ type CustodyBarSegment = {
 };
 
 interface CombinedCalendarProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 // Fallback colors for a guardian who doesn't have a custody_schedules row
@@ -622,11 +622,15 @@ export default function CombinedCalendar({ onBack }: CombinedCalendarProps) {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <Text style={[styles.backButtonText, { color: theme.tint }]}>
-            Back
-          </Text>
-        </TouchableOpacity>
+        {onBack ? (
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Text style={[styles.backButtonText, { color: theme.tint }]}>
+              Back
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.backButton} />
+        )}
         <Text style={[styles.headerTitle, { color: theme.text }]}>
           Combined Calendar
         </Text>

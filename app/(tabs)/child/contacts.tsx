@@ -419,6 +419,7 @@ export default function Contacts({ childName, childId, onBack }: ContactsProps) 
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
                 returnKeyType="done"
                 onSubmitEditing={Keyboard.dismiss}
               />
