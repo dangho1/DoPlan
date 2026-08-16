@@ -30,6 +30,7 @@ export default function ChildMenuScreen() {
     avatar_url: childAvatarUrl,
     color: null,
     created_at: "",
+    currency: null,
   };
   const child = currentChild ?? fallbackChild;
 
