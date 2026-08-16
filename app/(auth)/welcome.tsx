@@ -96,7 +96,7 @@ export default function WelcomeScreen({ onEmailSignUp, onLogin }: WelcomeScreenP
           resizeMode="contain"
         />
 
-        <Text style={[styles.appName, { color: Colors[colorScheme ?? 'light'].text }]}>CoPlan</Text>
+        <Text style={[styles.appName, { color: Colors[colorScheme ?? 'light'].text }]}>DoPlan</Text>
 
         <Text style={[styles.tagline, { color: Colors[colorScheme ?? 'light'].text }]}>
           Ready to get your family{'\n'}organized?

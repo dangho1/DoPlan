@@ -54,6 +54,7 @@ import {
   buildCustodyTemplate,
   formatLocalDateInput,
   formatLocalDateKey,
+  formatLocalTimeOfDay,
   getDayOfWeekMondayIndex,
   getDaysInMonth,
   getShiftedDate,
@@ -1677,19 +1678,27 @@ export default function Calendar({
 
   const getTimeFromEventValue = (value?: string | null) => {
     if (!value) return null;
-    const parts = value.split("T");
-    if (parts.length < 2) return null;
-    return normalizeClockTime(parts[1].substring(0, 5));
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return normalizeClockTime(formatLocalTimeOfDay(date).substring(0, 5));
   };
 
   const setSelectedEventTime = (field: "start" | "end", value: string) => {
     setSelectedEvent((previous: CalendarEvent | null) => {
       if (!previous) return previous;
       const key = field === "start" ? "start_time" : "end_time";
-      const currentValue = previous[key] || "";
-      const datePart =
-        currentValue.split("T")[0] || formatLocalDateInput(new Date());
-      return { ...previous, [key]: `${datePart}T${value}:00` };
+      const currentDate = previous[key]
+        ? new Date(previous[key])
+        : new Date();
+      const [hour, minute] = value.split(":").map(Number);
+      const nextDate = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        currentDate.getDate(),
+        hour,
+        minute,
+      );
+      return { ...previous, [key]: nextDate.toISOString() };
     });
   };
 
@@ -1747,21 +1756,27 @@ export default function Calendar({
               if (text.length === 10 && selectedEvent) {
                 const newDate = parseLocalDateInput(text);
                 if (newDate && !Number.isNaN(newDate.getTime())) {
-                  const startParts = selectedEvent.start_time?.split("T");
-                  const endParts = selectedEvent.end_time?.split("T");
-                  const timeStr =
-                    startParts && startParts.length > 1
-                      ? startParts[1].split(".")[0]
-                      : "00:00:00";
-                  const endTimeStr =
-                    endParts && endParts.length > 1
-                      ? endParts[1].split(".")[0]
-                      : "23:59:59";
+                  const applyDateKeepingTimeOfDay = (value: string) => {
+                    const current = new Date(value);
+                    if (Number.isNaN(current.getTime())) return value;
+                    return new Date(
+                      newDate.getFullYear(),
+                      newDate.getMonth(),
+                      newDate.getDate(),
+                      current.getHours(),
+                      current.getMinutes(),
+                      current.getSeconds(),
+                    ).toISOString();
+                  };
 
                   setSelectedEvent({
                     ...selectedEvent,
-                    start_time: `${text}T${timeStr}`,
-                    end_time: `${text}T${endTimeStr}`,
+                    start_time: applyDateKeepingTimeOfDay(
+                      selectedEvent.start_time,
+                    ),
+                    end_time: applyDateKeepingTimeOfDay(
+                      selectedEvent.end_time,
+                    ),
                   });
                 }
               }
@@ -1911,26 +1926,14 @@ export default function Calendar({
             onPress={async () => {
               if (!selectedEvent) return;
               try {
-                const normalizeTime = (timeStr: string) => {
-                  const parts = timeStr.split("T");
-                  if (parts.length < 2) return timeStr;
-                  const datePart = parts[0];
-                  const timePart = parts[1];
-                  const timeComponents = timePart.split(":");
-                  const hours = timeComponents[0]?.padStart(2, "0") || "00";
-                  const minutes = timeComponents[1]?.padStart(2, "0") || "00";
-                  const seconds = timeComponents[2]?.padStart(2, "0") || "00";
-                  return `${datePart}T${hours}:${minutes}:${seconds}`;
-                };
-
                 const { error } = await supabase
                   .from("calendar_events")
                   .update({
                     activity_name: selectedEvent.activity_name,
                     location: selectedEvent.location?.trim() ?? "",
                     notes: selectedEvent.notes?.trim() ?? "",
-                    start_time: normalizeTime(selectedEvent.start_time),
-                    end_time: normalizeTime(selectedEvent.end_time),
+                    start_time: selectedEvent.start_time,
+                    end_time: selectedEvent.end_time,
                   })
                   .eq("id", selectedEvent.id);
                 if (error) throw error;
@@ -1938,7 +1941,7 @@ export default function Calendar({
                 await rescheduleEventAlertFromPreference({
                   eventId: selectedEvent.id,
                   title: selectedEvent.activity_name,
-                  startTimeISO: normalizeTime(selectedEvent.start_time),
+                  startTimeISO: selectedEvent.start_time,
                   childName: resolvedChildName,
                 });
 

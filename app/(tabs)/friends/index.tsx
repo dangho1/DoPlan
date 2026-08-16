@@ -856,6 +856,7 @@ export default function FriendshipsScreen() {
               }
               onSubmitEditing={searchUsers}
               autoCapitalize="none"
+              autoCorrect={false}
               keyboardType="email-address"
             />
             <TouchableOpacity

@@ -82,6 +82,13 @@ export const formatLocalDateKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+export const formatLocalTimeOfDay = (date: Date) => {
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
+    return `${hours}:${minutes}:${seconds}`;
+};
+
 export const parseLocalDateInput = (text: string) => {
   const trimmed = text.trim();
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
@@ -189,10 +196,10 @@ export const layoutDayEvents = (
     .filter((event) => !isAllDayEvent(event))
     .map((event) => {
       const startTimeStr = event.start_time.includes("T")
-        ? event.start_time.split("T")[1].split(".")[0]
+        ? formatLocalTimeOfDay(new Date(event.start_time))
         : event.start_time;
       const endTimeStr = event.end_time.includes("T")
-        ? event.end_time.split("T")[1].split(".")[0]
+        ? formatLocalTimeOfDay(new Date(event.end_time))
         : event.end_time;
 
       const [startHour, startMin] = startTimeStr.split(":").map(Number);

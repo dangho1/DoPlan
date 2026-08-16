@@ -722,6 +722,7 @@ export default function ChildSettings({
                   value={editedName}
                   onChangeText={setEditedName}
                   onFocus={() => handleInputFocus(refNameInput.current)}
+                  autoCorrect={false}
                 />
               ) : (
                 <Text

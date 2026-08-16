@@ -129,6 +129,7 @@ export default function ResetPassword({ onBack }: ResetPasswordProps) {
             placeholder="Enter your email address"
             placeholderTextColor={Colors[colorScheme ?? "light"].textLight}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="email-address"
             editable={!emailSent}
           />
